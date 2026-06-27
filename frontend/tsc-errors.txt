@@ -1,0 +1,124 @@
+﻿src/auth-integration/src/api/axiosInstance.ts(1,63): error TS2307: Cannot find module 'axios' or its corresponding type declarations.
+src/auth-integration/src/api/axiosInstance.ts(7,30): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/auth-integration/src/api/axiosInstance.ts(25,37): error TS7006: Parameter 'config' implicitly has an 'any' type.
+src/auth-integration/src/api/axiosInstance.ts(56,4): error TS7006: Parameter 'response' implicitly has an 'any' type.
+src/auth-integration/src/app/AppProviders.tsx(2,50): error TS2307: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+src/auth-integration/src/app/AppProviders.tsx(3,31): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/auth-integration/src/app/routes.config.tsx(1,31): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/auth-integration/src/hooks/useCurrentUser.ts(1,26): error TS2307: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+src/auth-integration/src/hooks/useLogin.ts(1,29): error TS2307: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+src/auth-integration/src/hooks/useLogin.ts(11,17): error TS7006: Parameter 'data' implicitly has an 'any' type.
+src/auth-integration/src/hooks/useLogout.ts(1,45): error TS2307: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+src/auth-integration/src/hooks/useRegister.ts(1,29): error TS2307: Cannot find module '@tanstack/react-query' or its corresponding type declarations.
+src/auth-integration/src/hooks/useRegister.ts(19,17): error TS7006: Parameter 'data' implicitly has an 'any' type.
+src/auth-integration/src/routes/ProtectedRoute.tsx(1,47): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/auth-integration/src/routes/RoleBasedRoute.tsx(1,34): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/auth-integration/src/screens-integration/LoginScreenContainer.tsx(1,42): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/auth-integration/src/screens-integration/LoginScreenContainer.tsx(6,29): error TS2307: Cannot find module '../../screens/LoginScreen' or its corresponding type declarations.
+src/auth-integration/src/screens-integration/RegisterScreenContainer.tsx(1,29): error TS2307: Cannot find module 'react-router-dom' or its corresponding type declarations.
+src/auth-integration/src/screens-integration/RegisterScreenContainer.tsx(6,32): error TS2307: Cannot find module '../../screens/RegisterScreen' or its corresponding type declarations.
+src/pages/auth/AuthFlow.tsx(214,70): error TS2304: Cannot find name 'ArrowRight'.
+src/pages/auth/AuthFlow.tsx(559,66): error TS2304: Cannot find name 'ArrowRight'.
+src/pages/auth/AuthFlow.tsx(970,78): error TS2304: Cannot find name 'ArrowRight'.
+src/pages/student/StudentPortal.tsx(67,8): error TS2304: Cannot find name 'ChevronLeft'.
+src/pages/student/StudentPortal.tsx(101,23): error TS2304: Cannot find name 'CreditCard'.
+src/pages/student/StudentPortal.tsx(134,33): error TS2304: Cannot find name 'Wrench'.
+src/pages/student/StudentPortal.tsx(136,34): error TS2304: Cannot find name 'CreditCard'.
+src/pages/student/StudentPortal.tsx(138,34): error TS2304: Cannot find name 'Utensils'.
+src/pages/student/StudentPortal.tsx(143,48): error TS2304: Cannot find name 'CreditCard'.
+src/pages/student/StudentPortal.tsx(145,51): error TS2304: Cannot find name 'Wrench'.
+src/pages/student/StudentPortal.tsx(209,14): error TS2304: Cannot find name 'movementData'.
+src/pages/student/StudentPortal.tsx(209,44): error TS7006: Parameter 'm' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(229,41): error TS2304: Cannot find name 'Megaphone'.
+src/pages/student/StudentPortal.tsx(231,45): error TS2304: Cannot find name 'Lightbulb'.
+src/pages/student/StudentPortal.tsx(264,117): error TS2304: Cannot find name 'Edit3'.
+src/pages/student/StudentPortal.tsx(271,57): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(272,54): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(274,109): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(275,104): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(285,50): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(286,48): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(287,43): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(288,42): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(289,41): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(290,42): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(305,44): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(306,43): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(307,41): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(308,43): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(323,41): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(324,43): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(325,42): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(405,16): error TS2304: Cannot find name 'LogIn'.
+src/pages/student/StudentPortal.tsx(410,16): error TS2304: Cannot find name 'LogOut'.
+src/pages/student/StudentPortal.tsx(425,12): error TS2304: Cannot find name 'ResponsiveContainer'.
+src/pages/student/StudentPortal.tsx(426,14): error TS2304: Cannot find name 'BarChart'.
+src/pages/student/StudentPortal.tsx(426,29): error TS2304: Cannot find name 'attendanceData'.
+src/pages/student/StudentPortal.tsx(427,16): error TS2304: Cannot find name 'CartesianGrid'.
+src/pages/student/StudentPortal.tsx(428,16): error TS2304: Cannot find name 'XAxis'.
+src/pages/student/StudentPortal.tsx(429,16): error TS2304: Cannot find name 'YAxis'.
+src/pages/student/StudentPortal.tsx(430,16): error TS2304: Cannot find name 'Tooltip'.
+src/pages/student/StudentPortal.tsx(431,16): error TS2304: Cannot find name 'Bar'.
+src/pages/student/StudentPortal.tsx(432,16): error TS2304: Cannot find name 'Bar'.
+src/pages/student/StudentPortal.tsx(433,15): error TS2304: Cannot find name 'BarChart'.
+src/pages/student/StudentPortal.tsx(434,13): error TS2304: Cannot find name 'ResponsiveContainer'.
+src/pages/student/StudentPortal.tsx(500,10): error TS2304: Cannot find name 'movementData'.
+src/pages/student/StudentPortal.tsx(500,30): error TS7006: Parameter 'm' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(500,93): error TS7006: Parameter 'm' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(511,18): error TS2304: Cannot find name 'LogOut'.
+src/pages/student/StudentPortal.tsx(518,18): error TS2304: Cannot find name 'LogIn'.
+src/pages/student/StudentPortal.tsx(561,64): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(600,94): error TS2304: Cannot find name 'Send'.
+src/pages/student/StudentPortal.tsx(611,39): error TS2304: Cannot find name 'leaveHistory'.
+src/pages/student/StudentPortal.tsx(611,54): error TS2304: Cannot find name 'leaveHistory'.
+src/pages/student/StudentPortal.tsx(611,74): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(624,24): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(751,14): error TS2304: Cannot find name 'fees'.
+src/pages/student/StudentPortal.tsx(751,24): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(751,27): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(769,54): error TS2304: Cannot find name 'CreditCard'.
+src/pages/student/StudentPortal.tsx(782,35): error TS2304: Cannot find name 'fines'.
+src/pages/student/StudentPortal.tsx(782,48): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(782,68): error TS2304: Cannot find name 'fines'.
+src/pages/student/StudentPortal.tsx(782,81): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(807,100): error TS2304: Cannot find name 'Trophy'.
+src/pages/student/StudentPortal.tsx(815,21): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(890,90): error TS2304: Cannot find name 'Send'.
+src/pages/student/StudentPortal.tsx(902,8): error TS2304: Cannot find name 'complaints'.
+src/pages/student/StudentPortal.tsx(902,24): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(955,43): error TS2304: Cannot find name 'ThumbsUp'.
+src/pages/student/StudentPortal.tsx(991,14): error TS2304: Cannot find name 'laundryHistory'.
+src/pages/student/StudentPortal.tsx(991,34): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(1125,90): error TS2304: Cannot find name 'Send'.
+src/pages/student/StudentPortal.tsx(1155,150): error TS2304: Cannot find name 'Utensils'.
+src/pages/student/StudentPortal.tsx(1202,8): error TS2304: Cannot find name 'notices'.
+src/pages/student/StudentPortal.tsx(1202,21): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(1227,8): error TS2304: Cannot find name 'events'.
+src/pages/student/StudentPortal.tsx(1227,20): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(1242,18): error TS2304: Cannot find name 'Heart'.
+src/pages/student/StudentPortal.tsx(1245,18): error TS2304: Cannot find name 'Send'.
+src/pages/student/StudentPortal.tsx(1272,10): error TS2304: Cannot find name 'initiatives'.
+src/pages/student/StudentPortal.tsx(1272,27): error TS7006: Parameter 'init' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(1287,63): error TS2304: Cannot find name 'Heart'.
+src/pages/student/StudentPortal.tsx(1308,12): error TS2304: Cannot find name 'ThumbsUp'.
+src/pages/student/StudentPortal.tsx(1353,89): error TS2304: Cannot find name 'Send'.
+src/pages/student/StudentPortal.tsx(1365,11): error TS2304: Cannot find name 'CreditCard'.
+src/pages/student/StudentPortal.tsx(1366,17): error TS2304: Cannot find name 'Wrench'.
+src/pages/student/StudentPortal.tsx(1380,10): error TS2304: Cannot find name 'notifications'.
+src/pages/student/StudentPortal.tsx(1380,29): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/pages/student/StudentPortal.tsx(1403,97): error TS2304: Cannot find name 'Building'.
+src/pages/student/StudentPortal.tsx(1405,95): error TS2304: Cannot find name 'Heart'.
+src/pages/student/StudentPortal.tsx(1406,68): error TS2304: Cannot find name 'Flame'.
+src/pages/student/StudentPortal.tsx(1408,73): error TS2304: Cannot find name 'Zap'.
+src/pages/student/StudentPortal.tsx(1467,38): error TS2304: Cannot find name 'Info'.
+src/pages/student/StudentPortal.tsx(1487,64): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(1488,54): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(1489,77): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(1489,94): error TS2304: Cannot find name 'student'.
+src/pages/student/StudentPortal.tsx(1522,12): error TS2304: Cannot find name 'LogOut'.
+src/pages/student/StudentPortal.tsx(1537,39): error TS2304: Cannot find name 'Trophy'.
+src/pages/student/StudentPortal.tsx(1538,34): error TS2304: Cannot find name 'Wrench'.
+src/pages/student/StudentPortal.tsx(1540,35): error TS2304: Cannot find name 'Lightbulb'.
+src/pages/student/StudentPortal.tsx(1572,18): error TS2552: Cannot find name 'notifications'. Did you mean 'Notification'?
+src/pages/student/StudentPortal.tsx(1572,39): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/services/api.ts(5,30): error TS2339: Property 'env' does not exist on type 'ImportMeta'.

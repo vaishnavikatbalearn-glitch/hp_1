@@ -1,0 +1,748 @@
+// ─── Prisma Schema — HostelPaglu ─────────────────────────────────────────────
+// Production-ready schema for a multi-hostel management system.
+// All tables use UUID primary keys, soft deletes, and audit timestamps.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  WARDEN
+  STUDENT
+  PARENT
+  TRUSTEE
+  ACCOUNTANT
+  LAUNDRY_STAFF
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  DORMITORY
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  RESERVED
+}
+
+enum AllocationStatus {
+  ACTIVE
+  VACATED
+  TRANSFERRED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  ON_LEAVE
+  EXCUSED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum LeaveType {
+  HOME
+  MEDICAL
+  EMERGENCY
+  PERSONAL
+  OTHER
+}
+
+enum FeeType {
+  HOSTEL_FEE
+  MESS_FEE
+  LAUNDRY_FEE
+  MAINTENANCE_FEE
+  SECURITY_DEPOSIT
+  FINE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  WAIVED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CHEQUE
+  ONLINE
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REJECTED
+}
+
+enum ComplaintCategory {
+  MAINTENANCE
+  MESS
+  LAUNDRY
+  ROOMMATE
+  STAFF
+  SECURITY
+  OTHER
+}
+
+enum MaintenanceStatus {
+  REPORTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum LaundryStatus {
+  COLLECTED
+  WASHING
+  DRYING
+  READY
+  DELIVERED
+}
+
+enum MovementType {
+  EXIT
+  ENTRY
+}
+
+enum NoticeType {
+  GENERAL
+  URGENT
+  ACADEMIC
+  EVENT
+  MAINTENANCE
+  RULE
+}
+
+enum VisitorStatus {
+  PENDING
+  APPROVED
+  CHECKED_IN
+  CHECKED_OUT
+  REJECTED
+}
+
+// ─── Core Models ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  phone         String?   @unique
+  passwordHash  String
+  role          Role
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  lastLoginAt   DateTime?
+  refreshTokens RefreshToken[]
+
+  // Profile linkage (role-based)
+  studentProfile  Student?
+  parentProfile   Parent?
+  staffProfile    Staff?
+
+  // Audit
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  jti       String   @unique  // JWT ID for revocation
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([jti])
+  @@map("refresh_tokens")
+}
+
+model Hostel {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique   // e.g. "BH-01" (Boys Hostel 1)
+  address     String
+  city        String
+  state       String
+  pinCode     String
+  gender      Gender   // which gender this hostel serves
+  totalRooms  Int      @default(0)
+  totalFloors Int      @default(0)
+  isActive    Boolean  @default(true)
+  description String?
+  amenities   String[] @default([])
+  imageUrls   String[] @default([])
+
+  rooms     Room[]
+  floors    Floor[]
+  staff     Staff[]
+  students  Student[]
+  notices   Notice[]
+  events    Event[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([code])
+  @@map("hostels")
+}
+
+model Floor {
+  id       String  @id @default(uuid())
+  hostelId String
+  hostel   Hostel  @relation(fields: [hostelId], references: [id])
+  number   Int
+  name     String  // e.g. "Ground Floor", "First Floor"
+  isActive Boolean @default(true)
+  rooms    Room[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([hostelId, number])
+  @@index([hostelId])
+  @@map("floors")
+}
+
+model Room {
+  id          String     @id @default(uuid())
+  hostelId    String
+  hostel      Hostel     @relation(fields: [hostelId], references: [id])
+  floorId     String
+  floor       Floor      @relation(fields: [floorId], references: [id])
+  roomNumber  String
+  type        RoomType
+  capacity    Int
+  currentOccupancy Int  @default(0)
+  status      RoomStatus @default(AVAILABLE)
+  amenities   String[]   @default([])
+  pricePerMonth Decimal  @db.Decimal(10, 2)
+  description String?
+
+  allocations RoomAllocation[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([hostelId, roomNumber])
+  @@index([hostelId, status])
+  @@index([floorId])
+  @@map("rooms")
+}
+
+model Staff {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  hostelId     String
+  hostel       Hostel   @relation(fields: [hostelId], references: [id])
+  employeeCode String   @unique
+  firstName    String
+  lastName     String
+  gender       Gender
+  dateOfBirth  DateTime?
+  phone        String
+  address      String?
+  photoUrl     String?
+  designation  String
+  joiningDate  DateTime @default(now())
+  isActive     Boolean  @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([hostelId])
+  @@index([userId])
+  @@map("staff")
+}
+
+model Student {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  hostelId         String
+  hostel           Hostel   @relation(fields: [hostelId], references: [id])
+  enrollmentNumber String   @unique
+  firstName        String
+  lastName         String
+  gender           Gender
+  dateOfBirth      DateTime
+  phone            String
+  emergencyPhone   String
+  bloodGroup       String?
+  photoUrl         String?
+  faceEmbedding    Bytes?   // for face recognition
+  address          String
+  city             String
+  state            String
+  pinCode          String
+  course           String
+  year             Int
+  branch           String
+  college          String
+  isActive         Boolean  @default(true)
+  admissionDate    DateTime @default(now())
+  vacateDate       DateTime?
+
+  // Relations
+  parents          StudentParent[]
+  roomAllocation   RoomAllocation?
+  attendances      Attendance[]
+  movements        MovementLog[]
+  leaves           LeaveRequest[]
+  feeRecords       FeeRecord[]
+  fines            Fine[]
+  complaints       Complaint[]
+  maintenanceReqs  MaintenanceRequest[]
+  laundryReqs      LaundryRequest[]
+  visitors         VisitorRequest[]
+  feedbacks        Feedback[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([hostelId])
+  @@index([enrollmentNumber])
+  @@index([userId])
+  @@map("students")
+}
+
+model Parent {
+  id           String  @id @default(uuid())
+  userId       String  @unique
+  user         User    @relation(fields: [userId], references: [id])
+  firstName    String
+  lastName     String
+  phone        String
+  alternatePhone String?
+  email        String?
+  relation     String  // Father / Mother / Guardian
+  address      String?
+  photoUrl     String?
+  isVerified   Boolean @default(false)
+
+  students StudentParent[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@map("parents")
+}
+
+model StudentParent {
+  id        String  @id @default(uuid())
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+  parentId  String
+  parent    Parent  @relation(fields: [parentId], references: [id])
+  isPrimary Boolean @default(false)
+
+  @@unique([studentId, parentId])
+  @@index([studentId])
+  @@index([parentId])
+  @@map("student_parents")
+}
+
+model RoomAllocation {
+  id          String           @id @default(uuid())
+  studentId   String           @unique  // one active allocation per student
+  student     Student          @relation(fields: [studentId], references: [id])
+  roomId      String
+  room        Room             @relation(fields: [roomId], references: [id])
+  status      AllocationStatus @default(ACTIVE)
+  allocatedAt DateTime         @default(now())
+  vacatedAt   DateTime?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roomId])
+  @@index([studentId])
+  @@map("room_allocations")
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+model Attendance {
+  id        String           @id @default(uuid())
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id])
+  date      DateTime         @db.Date
+  status    AttendanceStatus
+  remarks   String?
+  markedBy  String           // staffId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([studentId, date])
+  @@index([date])
+  @@map("attendances")
+}
+
+model MovementLog {
+  id           String       @id @default(uuid())
+  studentId    String
+  student      Student      @relation(fields: [studentId], references: [id])
+  type         MovementType
+  timestamp    DateTime     @default(now())
+  purpose      String?
+  destination  String?
+  expectedReturn DateTime?
+  actualReturn   DateTime?
+  verifiedBy   String?      // staffId
+  isOvernightPass Boolean   @default(false)
+  leaveId      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([timestamp])
+  @@map("movement_logs")
+}
+
+// ─── Leave Requests ─────────────────────────────────────────────────────────
+
+model LeaveRequest {
+  id             String      @id @default(uuid())
+  studentId      String
+  student        Student     @relation(fields: [studentId], references: [id])
+  type           LeaveType
+  status         LeaveStatus @default(PENDING)
+  fromDate       DateTime
+  toDate         DateTime
+  reason         String
+  destination    String
+  contactAtLeave String
+  approvedBy     String?     // staffId
+  approvedAt     DateTime?
+  rejectedBy     String?
+  rejectedAt     DateTime?
+  rejectionReason String?
+  parentConsent  Boolean     @default(false)
+  attachmentUrls String[]    @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@index([fromDate, toDate])
+  @@map("leaves")
+}
+
+// ─── Finance ──────────────────────────────────────────────────────────────────
+
+model FeeRecord {
+  id            String        @id @default(uuid())
+  studentId     String
+  student       Student       @relation(fields: [studentId], references: [id])
+  type          FeeType
+  amount        Decimal       @db.Decimal(10, 2)
+  dueDate       DateTime
+  paidAmount    Decimal       @db.Decimal(10, 2) @default(0)
+  status        PaymentStatus @default(PENDING)
+  description   String?
+  month         Int?          // 1–12 for monthly fees
+  year          Int?
+  payments      Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@index([dueDate])
+  @@map("fee_records")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  feeRecordId   String
+  feeRecord     FeeRecord     @relation(fields: [feeRecordId], references: [id])
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  transactionId String?
+  receiptNumber String        @unique
+  paidAt        DateTime      @default(now())
+  notes         String?
+  collectedBy   String        // staffId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([feeRecordId])
+  @@map("payments")
+}
+
+model Fine {
+  id          String        @id @default(uuid())
+  studentId   String
+  student     Student       @relation(fields: [studentId], references: [id])
+  amount      Decimal       @db.Decimal(10, 2)
+  reason      String
+  issuedBy    String        // staffId
+  issuedAt    DateTime      @default(now())
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  paidAt      DateTime?
+  waivedBy    String?
+  waivedAt    DateTime?
+  waiverReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@map("fines")
+}
+
+// ─── Complaints & Maintenance ─────────────────────────────────────────────────
+
+model Complaint {
+  id           String            @id @default(uuid())
+  studentId    String
+  student      Student           @relation(fields: [studentId], references: [id])
+  category     ComplaintCategory
+  subject      String
+  description  String
+  status       ComplaintStatus   @default(OPEN)
+  priority     Int               @default(2) // 1=High 2=Medium 3=Low
+  assignedTo   String?           // staffId
+  resolvedBy   String?
+  resolvedAt   DateTime?
+  resolution   String?
+  attachmentUrls String[]        @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@map("complaints")
+}
+
+model MaintenanceRequest {
+  id           String            @id @default(uuid())
+  studentId    String
+  student      Student           @relation(fields: [studentId], references: [id])
+  title        String
+  description  String
+  location     String            // room number / area
+  status       MaintenanceStatus @default(REPORTED)
+  priority     Int               @default(2)
+  assignedTo   String?
+  scheduledAt  DateTime?
+  completedAt  DateTime?
+  completionNotes String?
+  attachmentUrls  String[]       @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@map("maintenance_requests")
+}
+
+// ─── Laundry ──────────────────────────────────────────────────────────────────
+
+model LaundryRequest {
+  id             String        @id @default(uuid())
+  studentId      String
+  student        Student       @relation(fields: [studentId], references: [id])
+  itemCount      Int
+  items          Json          // array of {name, qty}
+  collectedAt    DateTime?
+  handledBy      String?       // laundry staff userId
+  status         LaundryStatus @default(COLLECTED)
+  estimatedReady DateTime?
+  readyAt        DateTime?
+  deliveredAt    DateTime?
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@map("laundry_requests")
+}
+
+// ─── Notices & Events ─────────────────────────────────────────────────────────
+
+model Notice {
+  id          String     @id @default(uuid())
+  hostelId    String
+  hostel      Hostel     @relation(fields: [hostelId], references: [id])
+  title       String
+  content     String     @db.Text
+  type        NoticeType @default(GENERAL)
+  isPublished Boolean    @default(true)
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  postedBy    String     // staffId
+  targetRoles Role[]     @default([])
+  attachmentUrls String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([hostelId, isPublished])
+  @@map("notices")
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  hostelId    String
+  hostel      Hostel   @relation(fields: [hostelId], references: [id])
+  title       String
+  description String   @db.Text
+  venue       String
+  startDate   DateTime
+  endDate     DateTime
+  isPublished Boolean  @default(true)
+  organizedBy String   // staffId
+  imageUrls   String[] @default([])
+  maxCapacity Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([hostelId, startDate])
+  @@map("events")
+}
+
+// ─── Visitor Requests ───────────────────────────────────────────────────────
+
+model VisitorRequest {
+  id              String        @id @default(uuid())
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id])
+  visitorName     String
+  visitorPhone    String
+  relation        String
+  purpose         String
+  expectedDate    DateTime
+  expectedDuration Int          // minutes
+  status          VisitorStatus @default(PENDING)
+  approvedBy      String?
+  approvedAt      DateTime?
+  checkInAt       DateTime?
+  checkOutAt      DateTime?
+  idProofType     String?
+  idProofNumber   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@map("visitors")
+}
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+
+model Feedback {
+  id        String  @id @default(uuid())
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+  category  String
+  rating    Int     // 1–5
+  comment   String?
+  isAnonymous Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@map("feedbacks")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  type       String
+  data       Json?
+  isRead     Boolean  @default(false)
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  userRole   Role
+  action     String   // e.g. "leave.approved", "fee.paid"
+  entity     String   // e.g. "Leave", "FeeRecord"
+  entityId   String
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  requestId  String?
+  timestamp  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
