@@ -84,8 +84,8 @@ export class AppError extends Error {
     return new AppError(message, StatusCodes.UNAUTHORIZED, code);
   }
 
-  static forbidden(message = 'Forbidden'): AppError {
-    return new AppError(message, StatusCodes.FORBIDDEN, ErrorCode.FORBIDDEN);
+  static forbidden(message = 'Forbidden', code = ErrorCode.FORBIDDEN): AppError {
+    return new AppError(message, StatusCodes.FORBIDDEN, code);
   }
 
   static notFound(resource: string): AppError {

@@ -173,6 +173,7 @@ model User {
   studentProfile  Student?
   parentProfile   Parent?
   staffProfile    Staff?
+  notifications   Notification[]
 
   // Audit
   createdAt   DateTime  @default(now())

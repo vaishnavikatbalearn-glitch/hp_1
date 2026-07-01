@@ -87,14 +87,6 @@ const laundryChartData = [
   { day: "Sat", requests: 70, completed: 65 },
   { day: "Sun", requests: 35, completed: 35 },
 ];
-const leaveChartData = [
-  { month: "Jan", approved: 18, rejected: 4, pending: 3 },
-  { month: "Feb", approved: 22, rejected: 6, pending: 5 },
-  { month: "Mar", approved: 15, rejected: 2, pending: 8 },
-  { month: "Apr", approved: 28, rejected: 5, pending: 2 },
-  { month: "May", approved: 20, rejected: 3, pending: 4 },
-  { month: "Jun", approved: 25, rejected: 4, pending: 6 },
-];
 const yearlyData = [
   { year: "2021", students: 280, revenue: 45, attendance: 86 },
   { year: "2022", students: 310, revenue: 52, attendance: 88 },
@@ -1136,7 +1128,7 @@ function AdminAnalyticsScreen() {
 
   // Chart datasets backed by live API data.
   const [attendanceChartPointsLocal, setAttendanceChartPointsLocal] = useState<AttendanceChartPoint[]>(attendanceChartData as any);
-  const [leaveChartPointsLocal, setLeaveChartPointsLocal] = useState<LeaveChartPoint[]>(leaveChartData as any);
+  const [leaveChartPointsLocal, setLeaveChartPointsLocal] = useState<LeaveChartPoint[]>([]);
   const [occupancyChartPointsLocal, setOccupancyChartPointsLocal] = useState<OccupancyPoint[]>(occupancyPie as any);
   const [complaintChartPointsLocal, setComplaintChartPointsLocal] = useState<ComplaintChartPoint[]>(complaintData as any);
   const [laundryChartPointsLocal, setLaundryChartPointsLocal] = useState<LaundryChartPoint[]>(laundryChartData as any);

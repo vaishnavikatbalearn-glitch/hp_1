@@ -37,6 +37,7 @@ export async function createStudent(data: CreateStudentBody) {
   return prisma.student.create({
     data: {
       ...data,
+      gender: data.gender as 'MALE' | 'FEMALE' | 'OTHER',
       dateOfBirth: new Date(data.dateOfBirth),
       admissionDate: new Date(data.admissionDate),
       vacateDate: data.vacateDate ? new Date(data.vacateDate) : undefined,
@@ -68,9 +69,12 @@ export async function updateStudent(id: string, data: UpdateStudentBody) {
     where: { id },
     data: {
       ...data,
+      gender: data.gender ? (data.gender as 'MALE' | 'FEMALE' | 'OTHER') : undefined,
       dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
       admissionDate: data.admissionDate ? new Date(data.admissionDate) : undefined,
       vacateDate: data.vacateDate === undefined ? undefined : data.vacateDate ? new Date(data.vacateDate) : null,
+      userId: data.userId ?? undefined,
+      hostelId: data.hostelId ?? undefined,
     },
     select: STUDENT_SELECT,
   });

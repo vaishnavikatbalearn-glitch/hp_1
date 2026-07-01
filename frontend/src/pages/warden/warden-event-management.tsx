@@ -3,6 +3,9 @@ import { ArrowLeft, Plus, Calendar } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
+// TODO: Replace with live API when /v1/events endpoint is available
+// Ready for integration with getEvents() and createEvent() from services/api
+
 export function WardenEventManagement() {
   const navigate = useNavigate();
   const events = [

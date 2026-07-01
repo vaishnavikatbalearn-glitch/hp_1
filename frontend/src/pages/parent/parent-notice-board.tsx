@@ -1,22 +1,32 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Pin, Bell, Calendar, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { getNotices, type NoticeRecord } from '../../services/api';
 
 export function ParentNoticeBoard() {
   const navigate = useNavigate();
+  const [notices, setNotices] = useState<NoticeRecord[]>([]);
 
-  const notices = [
-    { id: 1, title: "Parent-Teacher Meeting", content: "Annual parent-teacher meeting scheduled for June 30, 2026 at 10:00 AM in the hostel common area.", date: "Jun 18, 2026", category: "Important", pinned: true },
-    { id: 2, title: "Hostel Maintenance", content: "Water supply will be disrupted on June 22 from 9 AM to 2 PM for pipeline maintenance.", date: "Jun 17, 2026", category: "Announcement", pinned: true },
-    { id: 3, title: "Cultural Fest 2026", content: "Annual cultural fest will be held from July 5-7. Students are encouraged to participate in various events.", date: "Jun 15, 2026", category: "Event", pinned: false },
-    { id: 4, title: "Exam Schedule Released", content: "End semester examination schedule has been released. Check the academic portal for details.", date: "Jun 12, 2026", category: "Important", pinned: false },
-    { id: 5, title: "Guest Lecture Series", content: "Industry experts will be delivering lectures on emerging technologies. All students invited.", date: "Jun 10, 2026", category: "Event", pinned: false },
-    { id: 6, title: "Hostel Room Inspection", content: "Monthly hostel room inspection will be conducted on June 25. Please ensure rooms are clean.", date: "Jun 8, 2026", category: "Announcement", pinned: false },
-  ];
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await getNotices();
+        setNotices(Array.isArray(data) ? data : []);
+      } catch {
+        setNotices([]);
+      }
+    };
 
-  const pinnedNotices = notices.filter(n => n.pinned);
-  const regularNotices = notices.filter(n => !n.pinned);
+    void load();
+  }, []);
+
+  const { pinnedNotices, regularNotices } = useMemo(() => {
+    const pinned = notices.filter((n) => Boolean(n.isPinned));
+    const regular = notices.filter((n) => !Boolean(n.isPinned));
+    return { pinnedNotices: pinned, regularNotices: regular };
+  }, [notices]);
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -84,7 +94,7 @@ export function ParentNoticeBoard() {
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">{notice.content}</p>
-                      <p className="text-xs text-muted-foreground">{notice.date}</p>
+                      <p className="text-xs text-muted-foreground">{notice.createdAt || notice.updatedAt ? (notice.createdAt ? new Date(notice.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date(notice.updatedAt || '').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })) : '—'}</p>
                     </div>
                   </Card>
                 ))}
@@ -107,7 +117,7 @@ export function ParentNoticeBoard() {
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">{notice.content}</p>
-                    <p className="text-xs text-muted-foreground">{notice.date}</p>
+                    <p className="text-xs text-muted-foreground">{notice.createdAt || notice.updatedAt ? (notice.createdAt ? new Date(notice.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date(notice.updatedAt || '').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })) : '—'}</p>
                   </div>
                 </Card>
               ))}

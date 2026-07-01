@@ -18,7 +18,7 @@ export function ParentNotifications() {
           type: item.type || 'notice',
           title: item.title,
           message: item.body,
-          time: item.time || (item.createdAt ? new Date(item.createdAt).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''),
+          time: item.time || (item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''),
           read: Boolean(item.read ?? item.isRead ?? false),
         })));
       } catch {
@@ -26,7 +26,7 @@ export function ParentNotifications() {
       }
     };
 
-    loadNotifications();
+    void loadNotifications();
   }, []);
 
   const handleNotificationClick = async (notificationId: string) => {
@@ -95,7 +95,9 @@ export function ParentNotifications() {
         <div className="flex-1 overflow-auto pb-6">
           <div className="px-6 py-6">
             <div className="space-y-3">
-              {notifications.map((notification) => (
+              {notifications.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground bg-card border border-border rounded-lg">No notifications found.</div>
+              ) : notifications.map((notification) => (
                 <Card 
                   key={notification.id} 
                   className={`${

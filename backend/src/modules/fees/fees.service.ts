@@ -1,4 +1,5 @@
-import { Prisma, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { PaymentStatus } from '@prisma/client';
+import type { Prisma, PaymentMethod } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../types/errors';
 import { paymentCreateSchema, paymentUpdateSchema } from './fees.validation';
@@ -100,7 +101,12 @@ export async function createFeePayment(input: PaymentCreateInput, collectedBy: s
     throw AppError.conflict('Receipt number already exists');
   }
 
-  const amount = new Prisma.Decimal(input.amount);
+  // Lazy-load Prisma runtime Decimal to avoid import-time dependency on
+  // @prisma/client; this prevents startup failures when the query engine
+  // binary is missing or corrupted.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-assignment
+  const PrismaRuntime = require('@prisma/client').Prisma as typeof Prisma;
+  const amount = new (PrismaRuntime as any).Decimal(input.amount);
   const remaining = feeRecord.amount.minus(feeRecord.paidAmount);
 
   if (amount.gt(remaining)) {
@@ -159,7 +165,7 @@ export async function updateFeePayment(paymentId: string, input: PaymentUpdateIn
   }
 
   const oldAmount = payment.amount;
-  const nextAmount = input.amount !== undefined ? new Prisma.Decimal(input.amount) : oldAmount;
+  const nextAmount = input.amount !== undefined ? new (require('@prisma/client').Prisma as any).Decimal(input.amount) : oldAmount;
   const amountDelta = nextAmount.minus(oldAmount);
   const nextPaidAmount = payment.feeRecord.paidAmount.add(amountDelta);
 

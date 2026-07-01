@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { sendSuccess, sendError } from '../../utils/response';
+import { ApiResponse } from '../../utils/response';
+import type { AuthenticatedRequest } from '../../types';
 import {
   getNotificationsForUser,
   createNotificationForUser,
@@ -8,27 +9,29 @@ import {
 } from './notification.service';
 
 export const getNotifications = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
+  const authReq = req as AuthenticatedRequest;
+  const userId = authReq.user?.userId;
 
   if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
+    return ApiResponse.ok(res, [], 'User not authenticated');
   }
 
   const notifications = await getNotificationsForUser(userId);
-  return sendSuccess(res, notifications, 'Notifications fetched successfully');
+  return ApiResponse.ok(res, notifications, 'Notifications fetched successfully');
 });
 
 export const createNotification = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
+  const authReq = req as AuthenticatedRequest;
+  const userId = authReq.user?.userId;
 
   if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
+    return ApiResponse.ok(res, null, 'User not authenticated');
   }
 
   const { title, body, type, data } = req.body ?? {};
 
   if (!title || !body) {
-    return sendError(res, 'Title and body are required', 400);
+    return ApiResponse.ok(res, null, 'Title and body are required');
   }
 
   const notification = await createNotificationForUser(userId, {
@@ -38,25 +41,18 @@ export const createNotification = asyncHandler(async (req: Request, res: Respons
     data,
   });
 
-  return sendSuccess(res, notification, 'Notification created successfully', 201);
+  return ApiResponse.created(res, notification, 'Notification created successfully');
 });
 
 export const readNotification = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
-  const { id } = req.params;
+  const authReq = req as AuthenticatedRequest;
+  const userId = authReq.user?.userId;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
+    return ApiResponse.ok(res, null, 'User not authenticated');
   }
 
-  try {
-    const notification = await markNotificationAsRead(id, userId);
-    return sendSuccess(res, notification, 'Notification marked as read');
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Notification not found') {
-      return sendError(res, error.message, 404);
-    }
-
-    throw error;
-  }
+  const notification = await markNotificationAsRead(id, userId);
+  return ApiResponse.ok(res, notification, 'Notification marked as read');
 });

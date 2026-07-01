@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { Prisma } from '@prisma/client';
+// Avoid importing @prisma/client at module load time to prevent import-time
+// failures when the generated query engine is missing. Detect Prisma errors
+// by shape/name instead.
 import { StatusCodes } from 'http-status-codes';
 import { ZodError } from 'zod';
 import { AppError, ErrorCode, ValidationErrorDetail } from '../types/errors';
@@ -72,17 +74,18 @@ function resolveError(err: unknown): AppError {
     return AppError.validation('Validation failed', details);
   }
 
-  // ── Prisma Errors ──────────────────────────────────────────────────────────
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    return resolvePrismaError(err);
+  // ── Prisma Errors (shape-based detection) ─────────────────────────────────
+  const maybePrisma = err as any;
+  if (maybePrisma?.name === 'PrismaClientKnownRequestError') {
+    return resolvePrismaError(maybePrisma);
   }
 
-  if (err instanceof Prisma.PrismaClientValidationError) {
+  if (maybePrisma?.name === 'PrismaClientValidationError') {
     return AppError.badRequest('Database validation error: invalid data shape');
   }
 
-  if (err instanceof Prisma.PrismaClientInitializationError) {
-    logger.error('[DB] Prisma initialization failed', { error: err.message });
+  if (maybePrisma?.name === 'PrismaClientInitializationError') {
+    logger.error('[DB] Prisma initialization failed', { error: maybePrisma.message });
     return new AppError(
       'Database connection failed',
       StatusCodes.SERVICE_UNAVAILABLE,
@@ -122,7 +125,7 @@ function resolveError(err: unknown): AppError {
 }
 
 // ─── Prisma Error Mapping ─────────────────────────────────────────────────────
-function resolvePrismaError(err: Prisma.PrismaClientKnownRequestError): AppError {
+function resolvePrismaError(err: { code?: string; meta?: Record<string, unknown> }): AppError {
   switch (err.code) {
     case 'P2002': {
       // Unique constraint violation

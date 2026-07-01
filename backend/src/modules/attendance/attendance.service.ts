@@ -96,17 +96,22 @@ export async function getAttendanceSummary(query: AttendanceSummaryQuery) {
     where: { date: { gte: from, lte: to }, status: 'ABSENT' },
   });
 
+  const late = await prisma.attendance.count({
+    where: { date: { gte: from, lte: to }, status: 'LATE' },
+  });
+
   const onLeave = await prisma.attendance.count({
     where: { date: { gte: from, lte: to }, status: 'ON_LEAVE' },
   });
 
   const daily = await prisma.$queryRaw<
-    Array<{ date: string; present: number; absent: number; onLeave: number }>
+    Array<{ date: string; present: number; absent: number; onLeave: number; late: number }>
   >`
     SELECT to_char(date, 'YYYY-MM-DD') AS date,
       COUNT(*) FILTER (WHERE status = 'PRESENT') AS present,
       COUNT(*) FILTER (WHERE status = 'ABSENT') AS absent,
-      COUNT(*) FILTER (WHERE status = 'ON_LEAVE') AS on_leave
+      COUNT(*) FILTER (WHERE status = 'ON_LEAVE') AS "onLeave"
+      , COUNT(*) FILTER (WHERE status = 'LATE') AS late
     FROM attendances
     WHERE date BETWEEN ${from} AND ${to}
     GROUP BY date
@@ -118,6 +123,7 @@ export async function getAttendanceSummary(query: AttendanceSummaryQuery) {
     present,
     absent,
     onLeave,
+    late,
     percentage: total ? Math.round((present / total) * 100) : 0,
   };
 
@@ -132,6 +138,7 @@ export async function getAttendanceSummary(query: AttendanceSummaryQuery) {
       present,
       absent,
       onLeave,
+      late,
       percentage: hostel.percentage,
     },
     overallPercentage: hostel.percentage,

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { Role } from '../types';
-import { AppError } from '../types/errors';
+import { AppError, ErrorCode } from '../types/errors';
 import type { AuthenticatedRequest } from '../types';
 import { createModuleLogger } from '../utils/logger';
 
@@ -150,15 +150,20 @@ export function requirePermission(permission: string): RequestHandler {
     const allowedRoles = PERMISSIONS[permission];
 
     if (!allowedRoles) {
-      // Unknown permission key — treat as super-admin only in prod, log warning
       log.warn(`Unknown permission key: "${permission}"`);
-      return next(AppError.forbidden(`Unknown permission: ${permission}`));
+      return next(
+        AppError.forbidden(
+          `Unknown permission: ${permission}`,
+          ErrorCode.INSUFFICIENT_PERMISSIONS,
+        ),
+      );
     }
 
     if (!allowedRoles.includes(authReq.user.role)) {
       return next(
         AppError.forbidden(
           `Permission denied: "${permission}" requires one of [${allowedRoles.join(', ')}]`,
+          ErrorCode.INSUFFICIENT_PERMISSIONS,
         ),
       );
     }

@@ -1,31 +1,169 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Home, Users, Bell, Settings, UserCheck, UserX, Clock, AlertCircle, BarChart3, FileText, Shield, Calendar } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Home, Users, Bell, UserCheck, AlertCircle, BarChart3, FileText, Shield, Calendar } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
+
+type DashboardActivity = {
+  type: 'leave' | 'complaint' | 'visitor' | 'entry';
+  student: string;
+  action: string;
+  time: string;
+};
+
+type DashboardQueryData = {
+  students: Array<Record<string, unknown>>;
+  attendance: Record<string, any>;
+  complaints: Array<Record<string, any>>;
+  leaves: Array<Record<string, any>>;
+  visitors: Array<Record<string, any>>;
+  laundry: Array<Record<string, any>>;
+  notifications: Array<Record<string, any>>;
+};
+
+function formatActivityTime(value?: string | null) {
+  if (!value) return 'Recently updated';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Recently updated';
+
+  return date.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function getDisplayName(student: Record<string, any> | null | undefined) {
+  if (!student) return 'Student';
+
+  const firstName = student.firstName ?? student?.student?.firstName ?? '';
+  const lastName = student.lastName ?? student?.student?.lastName ?? '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+
+  return fullName || student?.studentName || student?.visitorName || 'Student';
+}
 
 export function WardenDashboard() {
   const navigate = useNavigate();
 
-  const stats = {
-    totalStudents: 240,
-    presentStudents: 218,
-    absentStudents: 12,
-    studentsOnLeave: 10,
-    lateEntries: 5,
-    pendingComplaints: 8,
-    pendingVisitors: 3,
-    pendingLeaveRequests: 6,
-    pendingLaundry: 15,
-    occupancyRate: 91,
+  const dashboardQuery = useQuery<DashboardQueryData>({
+    queryKey: ['warden-dashboard-overview'],
+    queryFn: async () => {
+      const [studentsResponse, attendanceResponse, complaintsResponse, leaveResponse, visitorsResponse, laundryResponse, notificationsResponse] = await Promise.all([
+        apiClient.get('/v1/student'),
+        apiClient.get('/v1/attendance/summary'),
+        apiClient.get('/v1/complaints'),
+        apiClient.get('/v1/leave/warden'),
+        apiClient.get('/v1/visitor/warden'),
+        apiClient.get('/v1/laundry'),
+        apiClient.get('/v1/notifications'),
+      ]);
+
+      const extractArray = (response: any) => {
+        if (Array.isArray(response?.data?.data)) return response.data.data;
+        if (Array.isArray(response?.data)) return response.data;
+        return [];
+      };
+
+      const extractObject = (response: any) => response?.data?.data ?? response?.data ?? {};
+
+      return {
+        students: extractArray(studentsResponse),
+        attendance: extractObject(attendanceResponse),
+        complaints: extractArray(complaintsResponse),
+        leaves: extractArray(leaveResponse),
+        visitors: extractArray(visitorsResponse),
+        laundry: extractArray(laundryResponse),
+        notifications: extractArray(notificationsResponse),
+      };
+    },
+    staleTime: 30_000,
+  });
+
+  const dashboardData = dashboardQuery.data ?? {
+    students: [],
+    attendance: {},
+    complaints: [],
+    leaves: [],
+    visitors: [],
+    laundry: [],
+    notifications: [],
   };
 
-  const recentActivities = [
-    { type: 'leave', student: 'Rahul Sharma', action: 'Leave request submitted', time: '5 mins ago' },
-    { type: 'complaint', student: 'Priya Singh', action: 'Complaint registered', time: '15 mins ago' },
-    { type: 'visitor', student: 'Amit Kumar', action: 'Visitor approval pending', time: '1 hour ago' },
-    { type: 'entry', student: 'Neha Patel', action: 'Late entry at 11:45 PM', time: '2 hours ago' },
-  ];
+  const attendanceMeta = dashboardData.attendance?.hostel ?? dashboardData.attendance?.monthly ?? {};
+  const presentStudents = Number(attendanceMeta.present ?? 0);
+  const absentStudents = Number(attendanceMeta.absent ?? 0);
+  const studentsOnLeave = Number(attendanceMeta.onLeave ?? 0);
+  const lateStudents = Number(attendanceMeta.late ?? 0);
+  const attendanceRate = Number(dashboardData.attendance?.overallPercentage ?? attendanceMeta.percentage ?? 0);
+  const totalStudents = dashboardData.students.length || 0;
+
+  const pendingComplaints = dashboardData.complaints.filter((item: Record<string, any>) => !['RESOLVED', 'CLOSED', 'DONE'].includes(String(item?.status ?? '').toUpperCase())).length;
+  const pendingVisitors = dashboardData.visitors.filter((item: Record<string, any>) => !['APPROVED', 'REJECTED', 'CANCELLED'].includes(String(item?.status ?? '').toUpperCase())).length;
+  const pendingLeaveRequests = dashboardData.leaves.filter((item: Record<string, any>) => String(item?.status ?? '').toUpperCase() === 'PENDING').length;
+  const pendingLaundry = dashboardData.laundry.filter((item: Record<string, any>) => !['COMPLETED', 'DELIVERED', 'COLLECTED', 'READY'].includes(String(item?.status ?? '').toUpperCase())).length;
+  const unreadNotifications = dashboardData.notifications.filter((item: Record<string, any>) => !item?.read && !item?.isRead).length;
+
+  const stats = {
+    totalStudents,
+    presentStudents,
+    absentStudents,
+    studentsOnLeave,
+    lateEntries: lateStudents,
+    pendingComplaints,
+    pendingVisitors,
+    pendingLeaveRequests,
+    pendingLaundry,
+    occupancyRate: totalStudents ? Math.round((presentStudents / totalStudents) * 100) : 0,
+  };
+
+  const recentActivities = useMemo<DashboardActivity[]>(() => {
+    const activities: DashboardActivity[] = [];
+
+    dashboardData.leaves.slice(0, 2).forEach((leave: Record<string, any>) => {
+      activities.push({
+        type: 'leave',
+        student: getDisplayName(leave?.student),
+        action: `Leave ${String(leave?.status ?? 'pending').toLowerCase()} request`,
+        time: formatActivityTime(leave?.createdAt),
+      });
+    });
+
+    dashboardData.complaints.slice(0, 2).forEach((complaint: Record<string, any>) => {
+      activities.push({
+        type: 'complaint',
+        student: getDisplayName(complaint?.student),
+        action: `${complaint?.category ? String(complaint.category).toLowerCase() : 'Complaint'} ${String(complaint?.status ?? 'pending').toLowerCase()}`,
+        time: formatActivityTime(complaint?.createdAt),
+      });
+    });
+
+    dashboardData.visitors.slice(0, 1).forEach((visitor: Record<string, any>) => {
+      activities.push({
+        type: 'visitor',
+        student: visitor?.visitorName || 'Visitor',
+        action: `Visitor ${String(visitor?.status ?? 'pending').toLowerCase()} review`,
+        time: formatActivityTime(visitor?.createdAt),
+      });
+    });
+
+    if (!activities.length) {
+      dashboardData.notifications.slice(0, 2).forEach((item: Record<string, any>) => {
+        activities.push({
+          type: 'entry',
+          student: 'System',
+          action: item?.title ?? item?.body ?? 'Notification received',
+          time: formatActivityTime(item?.createdAt),
+        });
+      });
+    }
+
+    return activities.slice(0, 4);
+  }, [dashboardData]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -43,7 +181,7 @@ export function WardenDashboard() {
             >
               <Bell className="text-white" size={20} />
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive rounded-full text-white text-xs flex items-center justify-center">
-                12
+                {unreadNotifications}
               </span>
             </button>
           </div>
@@ -70,8 +208,8 @@ export function WardenDashboard() {
             </Card>
             <Card className="bg-white/90 border-0 backdrop-blur-sm">
               <div className="p-3 text-center">
-                <p className="text-2xl mb-1 text-amber-600">{stats.lateEntries}</p>
-                <p className="text-xs text-muted-foreground">Late</p>
+                <p className="text-2xl mb-1 text-amber-600">{stats.studentsOnLeave}</p>
+                <p className="text-xs text-muted-foreground">On Leave</p>
               </div>
             </Card>
           </div>
@@ -124,13 +262,13 @@ export function WardenDashboard() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-white/80 text-sm mb-1">Present Rate</p>
-                    <p className="text-3xl">{Math.round((stats.presentStudents / stats.totalStudents) * 100)}%</p>
+                    <p className="text-3xl">{totalStudents ? `${Math.round(attendanceRate)}%` : '0%'}</p>
                   </div>
                   <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
                     <UserCheck className="text-white" size={28} />
                   </div>
                 </div>
-                <Progress value={(stats.presentStudents / stats.totalStudents) * 100} className="h-2 bg-white/20" />
+                <Progress value={totalStudents ? (presentStudents / totalStudents) * 100 : 0} className="h-2 bg-white/20" />
                 <p className="text-white/80 text-xs mt-2">{stats.presentStudents} out of {stats.totalStudents} students</p>
               </div>
             </Card>
@@ -151,7 +289,7 @@ export function WardenDashboard() {
                   </div>
                 </div>
                 <Progress value={stats.occupancyRate} className="h-2 bg-white/20" />
-                <p className="text-white/80 text-xs mt-2">218 occupied out of 240 beds</p>
+                <p className="text-white/80 text-xs mt-2">{stats.presentStudents} occupied out of {stats.totalStudents} beds</p>
               </div>
             </Card>
           </div>
@@ -162,7 +300,7 @@ export function WardenDashboard() {
             <Card className="bg-card border-border">
               <div className="divide-y divide-border">
                 {recentActivities.map((activity, index) => (
-                  <div key={index} className="p-4 flex items-start space-x-3">
+                  <div key={`${activity.type}-${index}`} className="p-4 flex items-start space-x-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                       activity.type === 'leave' ? 'bg-amber-100' :
                       activity.type === 'complaint' ? 'bg-red-100' :

@@ -1,35 +1,163 @@
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Home, Calendar, Bell, User, CheckCircle2, Clock, DollarSign, CalendarCheck, ArrowRight, FileText, Award, Receipt } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useFeesContext } from '@/context/fees';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
 
 export function ParentDashboard() {
   const navigate = useNavigate();
-  const { parentDashboard, visitorRequests, refreshParentDashboard } = useFeesContext();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    void refreshParentDashboard();
-  }, [refreshParentDashboard]);
+  const profileQuery = useQuery({
+    queryKey: ['parent-dashboard-profile'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/auth/me');
+      const payload = data?.data ?? data ?? {};
+      const studentProfile = payload?.studentProfile ?? payload?.profile ?? payload?.student ?? {};
+      return {
+        name: [payload?.firstName, payload?.lastName].filter(Boolean).join(' ') || studentProfile?.name || payload?.name || 'Student',
+        enrollmentNumber: studentProfile?.enrollmentNumber || payload?.enrollmentNumber || payload?.enrollment || '',
+        roomNumber: studentProfile?.roomNumber || studentProfile?.room || payload?.roomNumber || payload?.room || '',
+        photo: studentProfile?.photo || payload?.photo || '',
+        status: payload?.status || 'Present',
+      };
+    },
+    staleTime: 60_000,
+  });
 
-  const studentData = {
-    name: "Rahul Sharma",
-    enrollmentNumber: "2021CSE045",
-    roomNumber: "A-204",
-    status: "Present",
-    photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400",
-    lastExit: "Today, 8:30 AM",
-    lastEntry: "Yesterday, 6:45 PM",
+  const attendanceQuery = useQuery({
+    queryKey: ['parent-dashboard-attendance'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/attendance/summary');
+      return data?.data ?? data ?? {};
+    },
+    staleTime: 30_000,
+  });
+
+  const leaveQuery = useQuery({
+    queryKey: ['parent-dashboard-leave'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/leave/student');
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const complaintsQuery = useQuery({
+    queryKey: ['parent-dashboard-complaints'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/complaints/my');
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const laundryQuery = useQuery({
+    queryKey: ['parent-dashboard-laundry'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/laundry');
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const visitorsQuery = useQuery({
+    queryKey: ['parent-dashboard-visitors'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/visitor/student');
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const feesQuery = useQuery({
+    queryKey: ['parent-dashboard-fees'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/fees/pending');
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const notificationsQuery = useQuery({
+    queryKey: ['parent-dashboard-notifications'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/v1/notifications');
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 15_000,
+  });
+
+  const studentData = profileQuery.data ?? {
+    name: 'Student',
+    enrollmentNumber: '',
+    roomNumber: '',
+    photo: '',
+    status: 'Present',
   };
 
-  const recentActivities = [
-    { type: 'entry', time: 'Today, 8:30 AM', description: 'Exit from hostel' },
-    { type: 'entry', time: 'Yesterday, 6:45 PM', description: 'Entry to hostel' },
-    { type: 'leave', time: '3 days ago', description: 'Weekend leave approved' },
-    { type: 'reward', time: '1 week ago', description: 'Received Academic Excellence award' },
-  ];
+  const attendancePercentage = Number(
+    attendanceQuery.data?.overallPercentage ?? attendanceQuery.data?.monthly?.percentage ?? attendanceQuery.data?.hostel?.percentage ?? 0,
+  );
+
+  const pendingFeeAmount = (feesQuery.data ?? []).reduce((sum, fee: any) => {
+    const amount = Number(fee?.amount ?? 0);
+    const paid = Number(fee?.paidAmount ?? 0);
+    return sum + Math.max(amount - paid, 0);
+  }, 0);
+
+  const leaveRequests = leaveQuery.data ?? [];
+  const leaveStatus = leaveRequests.length > 0
+    ? `Leave ${String(leaveRequests[0]?.status || 'Pending').toLowerCase()}`
+    : 'No Active Leave';
+
+  const complaintCount = (complaintsQuery.data ?? []).filter((item: any) => String(item?.status || '').toUpperCase() !== 'RESOLVED').length;
+  const complaintStatus = complaintCount > 0 ? `${complaintCount} Pending` : 'No Complaints';
+
+  const laundryStatus = (laundryQuery.data ?? [])[0]?.status ? String((laundryQuery.data ?? [])[0].status).toLowerCase() : 'No Requests';
+  const visitorStatus = (visitorsQuery.data ?? [])[0]?.status ? String((visitorsQuery.data ?? [])[0].status).toLowerCase() : 'No Requests';
+  const notificationCount = (notificationsQuery.data ?? []).filter((item: any) => !item?.read && !item?.isRead).length;
+
+  const parentDashboard = {
+    attendance: attendanceQuery.isLoading ? 'Loading...' : `${attendancePercentage}%`,
+    leaveStatus,
+    complaintStatus,
+    laundryStatus,
+    visitorStatus,
+    feeStatus: feesQuery.isLoading ? 'Loading...' : `₹${pendingFeeAmount.toLocaleString()}`,
+    notificationCount: notificationsQuery.isLoading ? 'Loading...' : String(notificationCount),
+  };
+
+  const recentActivities = useMemo(() => {
+    const notifications = (notificationsQuery.data ?? []).slice(0, 4).map((item: any) => ({
+      type: item?.type === 'leave' ? 'leave' : item?.type === 'fee' ? 'reward' : 'entry',
+      time: item?.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'Recently updated',
+      description: item?.title || item?.body || 'New update received',
+    }));
+
+    if (notifications.length) return notifications;
+    return [
+      { type: 'entry', time: 'Recently updated', description: 'Attendance data synced' },
+      { type: 'leave', time: 'Recently updated', description: 'Leave records synced' },
+      { type: 'reward', time: 'Recently updated', description: 'Fee records synced' },
+    ];
+  }, [notificationsQuery.data]);
+
+  const refreshDashboard = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-profile'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-attendance'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-leave'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-complaints'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-laundry'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-visitors'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-fees'] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard-notifications'] }),
+    ]);
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -188,7 +316,7 @@ export function ParentDashboard() {
         <div className="px-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base">Visitor Requests</h3>
-            <button onClick={() => void refreshParentDashboard()} className="text-primary text-sm">Refresh</button>
+            <button onClick={() => void refreshDashboard()} className="text-primary text-sm">Refresh</button>
           </div>
 
           <Card className="bg-card border-border">
@@ -196,10 +324,10 @@ export function ParentDashboard() {
               Visitor: {parentDashboard.visitorStatus} • Complaint: {parentDashboard.complaintStatus} • Laundry: {parentDashboard.laundryStatus}
             </div>
             <div className="divide-y divide-border">
-              {visitorRequests.length === 0 ? (
+              {(visitorsQuery.data ?? []).length === 0 ? (
                 <div className="p-4 text-sm text-muted-foreground">No visitor requests found.</div>
               ) : (
-                visitorRequests.map((visitor, index) => (
+                (visitorsQuery.data ?? []).map((visitor: any, index: number) => (
                   <div key={visitor.id || index} className="p-4">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm font-medium">{visitor.visitorName}</p>

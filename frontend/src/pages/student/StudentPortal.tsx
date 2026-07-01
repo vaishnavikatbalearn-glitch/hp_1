@@ -1,7 +1,9 @@
 // ─── STUDENT PORTAL — extracted from P2 (hp_p2) ──────────────────────────────
 import React, { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, createNotification, createVisitorRequest, getFeeDetails, getNotifications, getPaymentHistory, markNotificationAsRead, payFee, type FeeRecord, type NotificationItem, type VisitorRequest } from "../../services/api";
 import { authService } from "../../auth-integration/src/api/authService";
+import { apiClient } from "../../auth-integration/src/api/axiosInstance";
 import { toast } from "sonner";
 import {
   Home,
@@ -74,72 +76,73 @@ export interface StudentPortalProps {
   onLogout: () => void;
 }
 
-const attendanceData = [
-  { month: "Jan", present: 22, absent: 2 },
-  { month: "Feb", present: 20, absent: 4 },
-  { month: "Mar", present: 23, absent: 1 },
-  { month: "Apr", present: 21, absent: 3 },
-  { month: "May", present: 22, absent: 2 },
-  { month: "Jun", present: 20, absent: 4 },
-];
-
-const movementData = [
-  { date: "20 Jun 2025", entry: "6:45 PM", exit: "10:00 PM", status: "present", duration: "3h 15m" },
-  { date: "19 Jun 2025", entry: "6:20 PM", exit: "9:50 PM", status: "present", duration: "3h 30m" },
-  { date: "18 Jun 2025", entry: "7:15 PM", exit: "10:30 PM", status: "present", duration: "3h 15m" },
-  { date: "17 Jun 2025", entry: "6:55 PM", exit: "9:45 PM", status: "absent", duration: "2h 50m" },
-];
+type AttendanceChartPoint = { month: string; present: number; absent: number; leave: number };
 
 const student = {
-  name: "Arjun Sharma",
-  enrollment: "ENR-2024-0553",
-  room: "B-214",
-  floor: "2nd Floor",
-  dob: "12 Jan 2004",
-  bloodGroup: "B+",
-  phone: "+91 98765 43210",
-  email: "arjun.sharma@example.com",
-  city: "Bhopal",
-  state: "Madhya Pradesh",
-  college: "NIT Bhopal",
-  branch: "Computer Science",
-  year: "3rd Year",
-  hostel: "Vikas Bhawan",
-  parentName: "Mr. Suresh Sharma",
-  parentPhone: "+91 91234 56789",
-  parentEmail: "suresh.sharma@example.com",
-  leaveBalance: 8,
+  name: "",
+  enrollment: "",
+  room: "",
+  floor: "",
+  dob: "",
+  bloodGroup: "",
+  phone: "",
+  email: "",
+  city: "",
+  state: "",
+  college: "",
+  branch: "",
+  year: "",
+  hostel: "",
+  parentName: "",
+  parentPhone: "",
+  parentEmail: "",
+  leaveBalance: 0,
 };
 
-const fees = [
-  { term: "Jan–Mar 2025", due: "15 Mar 2025", status: "paid", paid: 45000, amount: 45000 },
-  { term: "Apr–Jun 2025", due: "30 Jun 2025", status: "partial", paid: 32500, amount: 45000 },
-];
+const normalizeProfile = (payload: any) => ({
+  id: payload?.id ?? payload?.studentId ?? "",
+  name: payload?.name ?? payload?.fullName ?? "",
+  enrollment: payload?.enrollmentNumber ?? payload?.enrollment ?? "",
+  room: payload?.room ?? payload?.roomNumber ?? "",
+  floor: payload?.floor ?? "",
+  dob: payload?.dob ?? payload?.dateOfBirth ?? "",
+  bloodGroup: payload?.bloodGroup ?? "",
+  phone: payload?.phone ?? payload?.phoneNumber ?? "",
+  email: payload?.email ?? "",
+  city: payload?.city ?? "",
+  state: payload?.state ?? "",
+  college: payload?.college ?? payload?.institution ?? "",
+  branch: payload?.branch ?? payload?.department ?? "",
+  year: payload?.year ?? "",
+  hostel: payload?.hostel ?? payload?.hostelName ?? "",
+  parentName: payload?.parentName ?? payload?.guardianName ?? "",
+  parentPhone: payload?.parentPhone ?? payload?.guardianPhone ?? "",
+  parentEmail: payload?.parentEmail ?? payload?.guardianEmail ?? "",
+  leaveBalance: typeof payload?.leaveBalance === "number" ? payload.leaveBalance : 8,
+  feeDue: payload?.feeDue ?? 0,
+  feeDueDueDate: payload?.feeDueDueDate ?? "",
+});
 
-const fines = [
-  { id: "FN-102", type: "Mess", reason: "Late fee payment", amount: 200, date: "15 Jun 2025", isReward: false, status: "pending" },
-  { id: "RW-022", type: "Attendance", reason: "Perfect attendance", points: 30, date: "12 Jun 2025", isReward: true, status: "earned" },
-];
+const buildAttendanceCalendar = (days: Array<{ date?: string; present?: number; absent?: number; onLeave?: number }>) => {
+  const entries = days
+    .map((entry) => {
+      if (!entry?.date) return null;
+      const date = new Date(entry.date);
+      if (Number.isNaN(date.getTime())) return null;
+      const status = entry.present ? "present" : entry.absent ? "absent" : entry.onLeave ? "leave" : "none";
+      return { day: date.getDate(), status };
+    })
+    .filter((entry): entry is { day: number; status: string } => entry !== null);
 
-const laundryHistory = [
-  { id: "LN-081", items: "3 Shirts, 2 Pants", status: "Ready", submitted: "18 Jun 2025" },
-  { id: "LN-079", items: "2 Bedsheets, 1 Blanket", status: "Delivered", submitted: "15 Jun 2025" },
-];
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const statusMap = new Map(entries.map((entry) => [entry.day, entry.status]));
 
-const notices = [
-  { id: "N-101", type: "announcement", urgent: false, title: "Hostel mess will remain closed on Sunday.", body: "Deep cleaning will be conducted on Sunday, so the mess will be closed for breakfast.", date: "20 Jun 2025" },
-  { id: "N-102", type: "pinned", urgent: true, title: "Fire drill scheduled.", body: "A mandatory fire safety drill is scheduled for 22 Jun 2025 at 10:00 AM.", date: "19 Jun 2025" },
-];
-
-const events = [
-  { id: "E-301", title: "Annual Cultural Fest", date: "28 Jun 2025", venue: "Auditorium", img: "https://images.unsplash.com/photo-1523567045336-0d1df1eb1f1b?auto=format&fit=crop&w=800&q=60", desc: "Music, dance, drama and food stalls with prizes for top performers.", guests: "300+ students" },
-  { id: "E-302", title: "Guest Lecture on AI", date: "25 Jun 2025", venue: "Lecture Hall 3", img: "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=800&q=60", desc: "Learn the latest in artificial intelligence from industry experts.", guests: "Prof. S. Gupta" },
-];
-
-const initiatives = [
-  { id: "I-201", title: "Startup Weekend", type: "startup", desc: "A 48-hour startup building challenge for student teams.", members: 18, interested: 32, icon: "🚀" },
-  { id: "I-202", title: "Eco Club", type: "club", desc: "Campus sustainability and tree-planting activities.", members: 46, interested: 64, icon: "🌿" },
-];
+  return Array.from({ length: daysInMonth }, (_, idx) => ({
+    day: idx + 1,
+    status: statusMap.get(idx + 1) ?? "none",
+  }));
+};
 
 const StatusBadge = ({ status }: { status: string }) => {
   const map: Record<string, string> = {
@@ -247,7 +250,7 @@ const BottomNav = ({ active, onNavigate, unread }: { active: string; onNavigate:
 );
 
 // ─── Screen: Dashboard ────────────────────────────────────────────────────────
-const DashboardScreen = ({ onNavigate, profile, attendanceRate, attendanceRecords, leaveBalance, complaintsOpen, attendanceSummary }: { onNavigate: (s: Screen) => void; profile: Partial<typeof student>; attendanceRate: number; attendanceRecords: typeof attendanceData; leaveBalance: number; complaintsOpen: number; attendanceSummary: { overallAttendance?: number; departmentAttendance?: number; hostelAttendance?: number; dailySummary?: string; monthlySummary?: string; }; }) => {
+const DashboardScreen = ({ onNavigate, profile, attendanceRate, attendanceRecords, leaveBalance, complaintsOpen, attendanceSummary }: { onNavigate: (s: Screen) => void; profile: Partial<typeof student>; attendanceRate: number; attendanceRecords: Array<{ month: string; present: number; absent: number; leave?: number }>; leaveBalance: number; complaintsOpen: number; attendanceSummary: { overallAttendance?: number; departmentAttendance?: number; hostelAttendance?: number; dailySummary?: string; monthlySummary?: string; }; }) => {
   const quickActions = [
     { label: "Apply\nLeave", icon: Calendar, screen: "leave-request" as Screen, color: "bg-blue-100 text-blue-700" },
     { label: "Complaint", icon: Wrench, screen: "maintenance" as Screen, color: "bg-amber-100 text-amber-700" },
@@ -282,14 +285,14 @@ const DashboardScreen = ({ onNavigate, profile, attendanceRate, attendanceRecord
             <span className="text-white font-bold text-base">{profile.name ? profile.name.split(' ').map((w) => w[0]).join('') : ""}</span>
           </button>
         </div>
-        {/* Present Status */}
+        {/* Present Status (dynamic based on attendanceSummary) */}
         <div className="bg-white/15 rounded-2xl p-3 flex items-center gap-3 border border-white/20">
           <div className="w-8 h-8 bg-emerald-400 rounded-xl flex items-center justify-center">
             <CheckCircle size={16} className="text-white" />
           </div>
           <div className="flex-1">
-            <p className="text-white font-semibold text-sm">Present · Inside Hostel</p>
-            <p className="text-blue-200 text-xs">Last entry: 6:45 PM · 20 Jun 2025</p>
+            <p className="text-white font-semibold text-sm">Attendance</p>
+            <p className="text-blue-200 text-xs">Last update: {attendanceSummary.monthlySummary ?? "-"}</p>
           </div>
           <span className="text-[10px] bg-emerald-400/30 text-emerald-200 font-bold px-2 py-1 rounded-full">IN</span>
         </div>
@@ -499,101 +502,81 @@ const ProfileScreen = ({ onBack, profile }: { onBack: () => void; profile: Parti
 
 // ─── Screen: Attendance ───────────────────────────────────────────────────────
 const AttendanceScreen = ({ onBack, onNavigate, studentId }: { onBack: () => void; onNavigate: (s: Screen) => void; studentId?: string }) => {
-  const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, percentage: 0, todayStatus: "No Record", lastUpdated: "-" });
-  const [monthlyAttendance, setMonthlyAttendance] = useState<any[]>([]);
-  const [loadingAttendance, setLoadingAttendance] = useState(false);
-  const [submittingAttendance, setSubmittingAttendance] = useState(false);
+  const queryClient = useQueryClient();
+  const attendanceQuery = useQuery({
+    queryKey: ["student-attendance-screen", studentId],
+    queryFn: async () => {
+      if (!studentId) {
+        return {
+          stats: { present: 0, absent: 0, leave: 0, percentage: 0, todayStatus: "No Record", lastUpdated: "-" },
+          monthly: [] as AttendanceChartPoint[],
+          daily: [],
+        };
+      }
 
-  const normalizeAttendanceRecord = (item: any) => ({
-    ...item,
-    status: String(item?.status || "").toUpperCase(),
-    date: item?.date || item?.createdAt || item?.updatedAt,
-    updatedAt: item?.updatedAt || item?.createdAt || item?.date,
+      const summary = await authService.getAttendanceSummary();
+      const payload = summary?.data ?? summary ?? {};
+      const dailyEntries = Array.isArray(payload?.daily) ? payload.daily : [];
+      const normalized = dailyEntries.map((entry: any) => ({
+        date: entry?.date ?? entry?.createdAt ?? entry?.updatedAt,
+        present: Number(entry?.present ?? 0),
+        absent: Number(entry?.absent ?? 0),
+        leave: Number(entry?.onLeave ?? entry?.on_leave ?? entry?.leave ?? 0),
+      }));
+      const present = normalized.reduce((sum: number, entry: any) => sum + Number(entry.present ?? 0), 0);
+      const absent = normalized.reduce((sum: number, entry: any) => sum + Number(entry.absent ?? 0), 0);
+      const leave = normalized.reduce((sum: number, entry: any) => sum + Number(entry.leave ?? 0), 0);
+      const total = present + absent + leave;
+      const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+      const latestEntry = normalized[normalized.length - 1];
+      const todayStatus = latestEntry
+        ? latestEntry.present > 0
+          ? "Present"
+          : latestEntry.absent > 0
+            ? "Absent"
+            : latestEntry.leave > 0
+              ? "Leave"
+              : "No Record"
+        : "No Record";
+      const lastUpdated = latestEntry?.date
+        ? new Date(latestEntry.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+        : "-";
+
+      return {
+        stats: { present, absent, leave, percentage, todayStatus, lastUpdated },
+        monthly: normalized.length ? [{ month: "Last 7 Days", present, absent, leave }] : [],
+        daily: dailyEntries,
+      };
+    },
+    enabled: Boolean(studentId),
+    staleTime: 30_000,
   });
 
-  const buildAttendanceSummary = (records: any[]) => {
-    const normalized = records.map(normalizeAttendanceRecord);
-    const present = normalized.filter((item: any) => item.status === "PRESENT").length;
-    const absent = normalized.filter((item: any) => item.status === "ABSENT").length;
-    const leave = normalized.filter((item: any) => ["ON_LEAVE", "LEAVE", "EXCUSED"].includes(item.status)).length;
-    const percentage = normalized.length ? Math.round((present / normalized.length) * 100) : 0;
-    const latestRecord = [...normalized].sort((a: any, b: any) => new Date(b.updatedAt || b.date || 0).getTime() - new Date(a.updatedAt || a.date || 0).getTime())[0];
-    const todayStatus = latestRecord
-      ? latestRecord.status === "PRESENT"
-        ? "Present"
-        : latestRecord.status === "ABSENT"
-          ? "Absent"
-          : latestRecord.status === "ON_LEAVE" || latestRecord.status === "LEAVE"
-            ? "Leave"
-            : "Unknown"
-      : "No Record";
-    const lastUpdated = latestRecord
-      ? new Date(latestRecord.updatedAt || latestRecord.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-      : "-";
+  const markAttendanceMutation = useMutation({
+    mutationFn: async (status: "PRESENT" | "ABSENT" | "ON_LEAVE") => {
+      await authService.markAttendance({ studentId, status, remarks: "" });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["student-attendance-screen", studentId] });
+      await queryClient.invalidateQueries({ queryKey: ["student-attendance-summary"] });
+    },
+  });
 
-    return {
-      records: normalized,
-      stats: { present, absent, leave, percentage, todayStatus, lastUpdated },
-      monthly: normalized.length ? [{ month: "Today", present, absent, leave }] : [],
-    };
-  };
-
-  useEffect(() => {
-    const loadAttendance = async () => {
-      if (!studentId) return;
-      setLoadingAttendance(true);
-      try {
-        const response = await authService.getTodayAttendance();
-        const payload = response?.data ?? response;
-        const records = Array.isArray(payload) ? payload : payload ? [payload] : [];
-        const summary = buildAttendanceSummary(records);
-        setAttendanceStats(summary.stats);
-        setMonthlyAttendance(summary.monthly);
-      } catch {
-        try {
-          const response = await authService.getStudentAttendance(studentId);
-          const payload = response?.data ?? response;
-          const records = Array.isArray(payload) ? payload : payload ? [payload] : [];
-          const summary = buildAttendanceSummary(records);
-          setAttendanceStats(summary.stats);
-          setMonthlyAttendance(summary.monthly);
-        } catch {
-          setAttendanceStats({ present: 0, absent: 0, leave: 0, percentage: 0, todayStatus: "No Record", lastUpdated: "-" });
-          setMonthlyAttendance([]);
-        }
-      } finally {
-        setLoadingAttendance(false);
-      }
-    };
-
-    loadAttendance();
-  }, [studentId]);
+  const attendanceStats = attendanceQuery.data?.stats ?? { present: 0, absent: 0, leave: 0, percentage: 0, todayStatus: "No Record", lastUpdated: "-" };
+  const monthlyAttendance = attendanceQuery.data?.monthly ?? [];
+  const loadingAttendance = attendanceQuery.isLoading || attendanceQuery.isFetching;
+  const submittingAttendance = markAttendanceMutation.isPending;
 
   const handleMarkAttendance = async (status: "PRESENT" | "ABSENT" | "ON_LEAVE") => {
     if (!studentId) return;
-    setSubmittingAttendance(true);
-    try {
-      const response = await authService.markAttendance({ studentId, status, remarks: "" });
-      const payload = response?.data ?? response;
-      const entry = normalizeAttendanceRecord(payload);
-
-      setAttendanceStats((prev) => {
-        const nextRecords = [entry, ...[]];
-        return prev;
-      });
-      setMonthlyAttendance([{ month: "Today", present: status === "PRESENT" ? 1 : 0, absent: status === "ABSENT" ? 1 : 0, leave: status === "ON_LEAVE" ? 1 : 0 }]);
-    } catch {
-      // Keep existing UI state intact if the request fails.
-    } finally {
-      setSubmittingAttendance(false);
-    }
+    await markAttendanceMutation.mutateAsync(status);
   };
 
-  const calDays = Array.from({ length: 30 }, (_, i) => {
-    const d = i + 1;
-    const status = d > 20 ? "future" : d % 7 === 0 ? "absent" : d % 13 === 0 ? "absent" : "present";
-    return { d, status };
-  });
+  const calendarDays = React.useMemo(() => buildAttendanceCalendar(attendanceQuery.data?.daily ?? []), [attendanceQuery.data?.daily]);
+  const calendarTitle = React.useMemo(() => {
+    const now = new Date();
+    return now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, []);
 
   const summaryLabel = loadingAttendance ? "Loading..." : `${attendanceStats.present} Present · ${attendanceStats.absent} Absent · ${attendanceStats.leave} Leave`;
 
@@ -687,7 +670,7 @@ const AttendanceScreen = ({ onBack, onNavigate, studentId }: { onBack: () => voi
 
         {/* Calendar */}
         <Card className="p-4">
-          <SectionHeader title="June 2025 Calendar" />
+          <SectionHeader title={`${calendarTitle} Calendar`} />
           <div className="grid grid-cols-7 gap-1 mb-2">
             {["S","M","T","W","T","F","S"].map((d, i) => (
               <div key={i} className="text-center text-[10px] font-bold text-slate-400">{d}</div>
@@ -695,10 +678,10 @@ const AttendanceScreen = ({ onBack, onNavigate, studentId }: { onBack: () => voi
           </div>
           <div className="grid grid-cols-7 gap-1">
             {[...Array(6)].map((_, i) => <div key={`e${i}`} />)}
-            {calDays.map(({ d, status }) => (
-              <div key={d} className={`aspect-square rounded-lg flex items-center justify-center text-[11px] font-semibold
-                ${status === "present" ? "bg-blue-100 text-blue-700" : status === "absent" ? "bg-red-100 text-red-600" : "text-slate-300"}`}>
-                {d}
+            {calendarDays.map(({ day, status }) => (
+              <div key={day} className={`aspect-square rounded-lg flex items-center justify-center text-[11px] font-semibold
+                ${status === "present" ? "bg-blue-100 text-blue-700" : status === "absent" ? "bg-red-100 text-red-600" : status === "leave" ? "bg-amber-100 text-amber-700" : "bg-slate-50 text-slate-300"}`}>
+                {day}
               </div>
             ))}
           </div>
@@ -744,45 +727,23 @@ const MovementScreen = ({ onBack }: { onBack: () => void }) => {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by date..."
             className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
-        {movementData.filter(m => m.date.toLowerCase().includes(search.toLowerCase())).map((m) => (
-          <Card key={m.date} className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-xs font-bold text-slate-800">{m.date}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">Duration outside: {m.duration}</p>
-              </div>
-              <StatusBadge status={m.status} />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1 flex items-center gap-2 bg-orange-50 rounded-xl px-3 py-2">
-                <LogOut size={12} className="text-orange-600" />
-                <div>
-                  <p className="text-[9px] text-slate-500">Exit</p>
-                  <p className="text-xs font-bold text-orange-700">{m.exit}</p>
-                </div>
-              </div>
-              <div className="flex-1 flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2">
-                <LogIn size={12} className="text-emerald-600" />
-                <div>
-                  <p className="text-[9px] text-slate-500">Entry</p>
-                  <p className="text-xs font-bold text-emerald-700">{m.entry}</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
+
+        {/* Movement API not available in current backend module set; remove mock data */}
+        <Card className="p-6 text-center text-slate-600">
+          Movement history is not available right now.
+        </Card>
       </div>
     </div>
   );
 };
 
 // ─── Screen: Leave Request ────────────────────────────────────────────────────
-const LeaveRequestScreen = ({ onBack, onNavigate, onSubmit }: { onBack: () => void; onNavigate: (s: Screen) => void; onSubmit: (request: { reason: string; startDate: string; endDate: string; destination: string; contact: string; details: string }) => Promise<void> }) => {
+const LeaveRequestScreen = ({ onBack, onNavigate, onSubmit, leaveBalanceValue }: { onBack: () => void; onNavigate: (s: Screen) => void; onSubmit: (request: { reason: string; startDate: string; endDate: string; destination: string; contact: string; details: string }) => Promise<void>; leaveBalanceValue: number }) => {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -965,63 +926,43 @@ const CurfewScreen = ({ onBack }: { onBack: () => void }) => {
     <div className="flex-1 overflow-y-auto">
       <BackHeader title="Curfew Extension" onBack={onBack} />
       <div className="px-4 py-4 space-y-4 pb-6">
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="p-3 text-center">
-            <p className="text-[10px] text-slate-500 mb-1">Current Curfew</p>
-            <p className="text-lg font-bold text-slate-900">10:00 PM</p>
-            <p className="text-[10px] text-slate-400">Weekdays</p>
-          </Card>
-          <Card className="p-3 text-center">
-            <p className="text-[10px] text-slate-500 mb-1">Weekend Curfew</p>
-            <p className="text-lg font-bold text-slate-900">11:00 PM</p>
-            <p className="text-[10px] text-slate-400">Sat & Sun</p>
-          </Card>
-        </div>
+        <Card className="p-4">
+          <SectionHeader title="Curfew" />
+          <p className="text-sm text-slate-500">Curfew extension and curfew rules are not available in the current backend module set.</p>
+        </Card>
 
-        {submitted ? (
-          <Card className="p-6 text-center">
-            <CheckCircle size={40} className="text-emerald-500 mx-auto mb-3" />
-            <h3 className="font-bold text-slate-900 mb-1">Extension Requested</h3>
-            <p className="text-xs text-slate-500">Pending warden approval. You will receive a notification shortly.</p>
-          </Card>
-        ) : (
-          <Card className="p-4">
-            <h3 className="text-sm font-bold text-slate-800 mb-4">Request Extension</h3>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Requested Return Time *</label>
-              <input type="time" value={form.time} onChange={(e) => set("time")(e.target.value)} className={`w-full bg-slate-50 border-2 rounded-xl px-3 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${!timeValid ? "border-red-400" : "border-slate-200"}`} />
-              {timeError && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} />{timeError}</p>}
+        <Card className="p-4">
+          <h3 className="text-sm font-bold text-slate-800 mb-4">Request Extension</h3>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Requested Return Time *</label>
+            <input type="time" value={form.time} onChange={(e) => set("time")(e.target.value)} className={`w-full bg-slate-50 border-2 rounded-xl px-3 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${!timeValid ? "border-red-400" : "border-slate-200"}`} />
+            {timeError && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} />{timeError}</p>}
+          </div>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date *</label>
+            <input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} className={`w-full bg-slate-50 border-2 rounded-xl px-3 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${!dateValid ? "border-red-400" : "border-slate-200"}`} />
+            {dateError && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} />{dateError}</p>}
+          </div>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Reason *</label>
+            <textarea rows={3} value={form.reason} onChange={(e) => set("reason")(e.target.value)} placeholder="Explain why you need an extension..." className={`w-full bg-slate-50 border-2 rounded-xl px-3 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none transition-colors ${!reasonValid ? "border-red-400" : "border-slate-200"}`} />
+            {reasonError && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} />{reasonError}</p>}
+          </div>
+
+          {submitted ? (
+            <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
+              <CheckCircle size={40} className="text-emerald-500 mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 mb-1">Request Recorded</h3>
+              <p className="text-xs text-slate-500">Backend curfew workflow is not wired yet; this is a local confirmation only.</p>
             </div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date *</label>
-              <input type="date" value={form.date} onChange={(e) => set("date")(e.target.value)} className={`w-full bg-slate-50 border-2 rounded-xl px-3 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${!dateValid ? "border-red-400" : "border-slate-200"}`} />
-              {dateError && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} />{dateError}</p>}
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Reason *</label>
-              <textarea rows={3} value={form.reason} onChange={(e) => set("reason")(e.target.value)} placeholder="Explain why you need an extension..." className={`w-full bg-slate-50 border-2 rounded-xl px-3 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none transition-colors ${!reasonValid ? "border-red-400" : "border-slate-200"}`} />
-              {reasonError && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={12} />{reasonError}</p>}
-            </div>
+          ) : (
             <PrimaryBtn label="Submit Request" onClick={() => setSubmitted(true)} disabled={!isFormValid} />
-          </Card>
-        )}
+          )}
+        </Card>
 
         <Card className="p-4">
           <SectionHeader title="Past Requests" />
-          <div className="space-y-2">
-            {[
-              { date: "15 Jun 2025", time: "11:30 PM", reason: "College fest", status: "approved" },
-              { date: "02 Jun 2025", time: "11:00 PM", reason: "Group study", status: "rejected" },
-            ].map((r, i) => (
-              <div key={i} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
-                <div>
-                  <p className="text-xs font-semibold text-slate-700">{r.date} · Until {r.time}</p>
-                  <p className="text-[11px] text-slate-400">{r.reason}</p>
-                </div>
-                <StatusBadge status={r.status} />
-              </div>
-            ))}
-          </div>
+          <p className="text-sm text-slate-500">No historical curfew requests available right now.</p>
         </Card>
       </div>
     </div>
@@ -1030,8 +971,7 @@ const CurfewScreen = ({ onBack }: { onBack: () => void }) => {
 
 // ─── Screen: Fees ─────────────────────────────────────────────────────────────
 const FeesScreen = ({ onBack, studentId }: { onBack: () => void; studentId?: string }) => {
-  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -1060,34 +1000,20 @@ const FeesScreen = ({ onBack, studentId }: { onBack: () => void; studentId?: str
     });
   };
 
-  useEffect(() => {
-    if (!studentId) return;
+  const feeQuery = useQuery({
+    queryKey: ["student-fees", studentId],
+    queryFn: async () => {
+      if (!studentId) return [] as FeeRecord[];
+      const [details, history] = await Promise.all([getFeeDetails(studentId), getPaymentHistory(studentId)]);
+      return uniqueFeeRecords([...details, ...history]);
+    },
+    enabled: Boolean(studentId),
+    staleTime: 30_000,
+  });
 
-    let active = true;
-    const loadFees = async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const [details, history] = await Promise.all([getFeeDetails(studentId), getPaymentHistory(studentId)]);
-        if (active) {
-          setFeeRecords(uniqueFeeRecords([...details, ...history]));
-        }
-      } catch {
-        if (active) {
-          setError("Unable to load fee details right now.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadFees();
-    return () => {
-      active = false;
-    };
-  }, [studentId]);
+  const feeRecords = feeQuery.data ?? [];
+  const loading = feeQuery.isLoading;
+  const feeError = feeQuery.isError ? "Unable to load fee details right now." : error;
 
   const total = feeRecords.reduce((sum, record) => sum + Number(record.amount ?? 0), 0);
   const paid = feeRecords.reduce((sum, record) => sum + Number(record.paidAmount ?? 0), 0);
@@ -1114,8 +1040,7 @@ const FeesScreen = ({ onBack, studentId }: { onBack: () => void; studentId?: str
         notes: "Paid from student portal",
       });
 
-      const [details, history] = await Promise.all([getFeeDetails(studentId), getPaymentHistory(studentId)]);
-      setFeeRecords(uniqueFeeRecords([...details, ...history]));
+      await queryClient.invalidateQueries({ queryKey: ["student-fees", studentId] });
       setSuccess("Payment submitted successfully.");
     } catch {
       setError("Payment could not be completed. Please try again.");
@@ -1182,7 +1107,7 @@ const FeesScreen = ({ onBack, studentId }: { onBack: () => void; studentId?: str
           )}
         </Card>
 
-        {error ? <p className="text-sm text-red-500">{error}</p> : null}
+        {feeError ? <p className="text-sm text-red-500">{feeError}</p> : null}
         {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
 
         <PrimaryBtn
@@ -1259,14 +1184,36 @@ const FinesScreen = ({ onBack }: { onBack: () => void }) => {
 // ─── Screen: Maintenance Request ──────────────────────────────────────────────
 const MaintenanceScreen = ({ onBack, onNavigate }: { onBack: () => void; onNavigate: (s: Screen) => void }) => {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const types = ["Plumbing", "Electrical", "Furniture", "Cleaning", "Network/WiFi", "AC/Fan", "Other"];
   const [selected, setSelected] = useState("Plumbing");
+  const [priority, setPriority] = useState("High — Urgent Fix Required");
   const [form, setForm] = useState({ description: "" });
   
   // Validation
   const descriptionValid = form.description.trim().length >= 20;
   const isFormValid = descriptionValid;
   const descError = form.description.trim() === "" ? "Description is required" : form.description.trim().length < 20 ? "Minimum 20 characters required" : "";
+
+  const handleSubmitComplaint = async () => {
+    if (!isFormValid || submitting) return;
+
+    setSubmitting(true);
+    try {
+      const priorityValue = priority.includes("High") ? 1 : priority.includes("Low") ? 3 : 2;
+      await apiClient.post("/v1/complaints", {
+        category: "MAINTENANCE",
+        subject: `${selected} issue`,
+        description: form.description.trim(),
+        priority: priorityValue,
+      });
+      setSubmitted(true);
+    } catch {
+      toast.error("Couldn't submit your complaint. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   if (submitted) return (
     <div className="flex-1 flex flex-col">
       <BackHeader title="Raise Complaint" onBack={onBack} />
@@ -1300,7 +1247,11 @@ const MaintenanceScreen = ({ onBack, onNavigate }: { onBack: () => void; onNavig
           </div>
           <div className="mb-4">
             <label className="block text-xs font-semibold text-slate-600 mb-1.5">Priority *</label>
-            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
               <option>High — Urgent Fix Required</option>
               <option>Medium — Fix Within 2 Days</option>
               <option>Low — Scheduled Maintenance</option>
@@ -1318,7 +1269,7 @@ const MaintenanceScreen = ({ onBack, onNavigate }: { onBack: () => void; onNavig
               <p className="text-[11px] text-slate-400">Tap to upload photo (optional)</p>
             </div>
           </div>
-          <PrimaryBtn label="Submit Complaint" onClick={() => setSubmitted(true)} icon={<Send size={16} />} disabled={!isFormValid} />
+          <PrimaryBtn label={submitting ? "Submitting..." : "Submit Complaint"} onClick={handleSubmitComplaint} icon={<Send size={16} />} disabled={!isFormValid || submitting} />
         </Card>
       </div>
     </div>
@@ -1378,12 +1329,25 @@ const ComplaintsScreen = ({ onBack, complaints }: { onBack: () => void; complain
 );
 
 // ─── Screen: Laundry Dashboard ────────────────────────────────────────────────
-const LaundryDashboardScreen = ({ onBack, onNavigate }: { onBack: () => void; onNavigate: (s: Screen) => void }) => {
+const LaundryDashboardScreen = ({ onBack, onNavigate, laundryHistory }: { onBack: () => void; onNavigate: (s: Screen) => void; laundryHistory: Array<{ id: string; items: string; status: string; submitted: string }> }) => {
+  const stageCounts = laundryHistory.reduce(
+    (acc, item) => {
+      const status = String(item.status || "pending").toLowerCase();
+      if (["pending", "submitted", "requested"].includes(status)) acc.pending += 1;
+      else if (["washing", "drying", "processing", "in-progress", "in_progress"].includes(status)) acc.processing += 1;
+      else if (["ready"].includes(status)) acc.ready += 1;
+      else if (["delivered", "collected"].includes(status)) acc.delivered += 1;
+      return acc;
+    },
+    { pending: 0, processing: 0, ready: 0, delivered: 0 },
+  );
+
+  const readyPickup = laundryHistory.find((item) => ["ready", "delivered", "collected"].includes(String(item.status || "").toLowerCase()));
   const stages = [
-    { label: "Pending", count: 0, icon: Package, color: "bg-slate-100 text-slate-500" },
-    { label: "Processing", count: 1, icon: RefreshCw, color: "bg-blue-100 text-blue-600" },
-    { label: "Ready", count: 1, icon: CheckCircle, color: "bg-purple-100 text-purple-600" },
-    { label: "Delivered", count: 5, icon: ThumbsUp, color: "bg-emerald-100 text-emerald-600" },
+    { label: "Pending", count: stageCounts.pending, icon: Package, color: "bg-slate-100 text-slate-500" },
+    { label: "Processing", count: stageCounts.processing, icon: RefreshCw, color: "bg-blue-100 text-blue-600" },
+    { label: "Ready", count: stageCounts.ready, icon: CheckCircle, color: "bg-purple-100 text-purple-600" },
+    { label: "Delivered", count: stageCounts.delivered, icon: ThumbsUp, color: "bg-emerald-100 text-emerald-600" },
   ];
   return (
     <div className="flex-1 overflow-y-auto">
@@ -1407,13 +1371,15 @@ const LaundryDashboardScreen = ({ onBack, onNavigate }: { onBack: () => void; on
         </div>
 
         {/* Ready for pickup alert */}
-        <div className="p-3 bg-purple-50 border border-purple-100 rounded-2xl flex items-start gap-3">
-          <CheckCircle size={18} className="text-purple-600 shrink-0" />
-          <div className="flex-1">
-            <p className="text-xs font-bold text-purple-800">LN-081 is ready for pickup!</p>
-            <p className="text-[11px] text-purple-600">3 Shirts, 2 Pants · Room B-214 delivery available</p>
+        {readyPickup ? (
+          <div className="p-3 bg-purple-50 border border-purple-100 rounded-2xl flex items-start gap-3">
+            <CheckCircle size={18} className="text-purple-600 shrink-0" />
+            <div className="flex-1">
+              <p className="text-xs font-bold text-purple-800">{readyPickup.id} is ready for pickup!</p>
+              <p className="text-[11px] text-purple-600">{readyPickup.items} · Room delivery available</p>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {/* History */}
         <Card className="p-4">
@@ -1443,6 +1409,7 @@ const LaundryDashboardScreen = ({ onBack, onNavigate }: { onBack: () => void; on
 
 // ─── Screen: Laundry Request ──────────────────────────────────────────────────
 const LaundryRequestScreen = ({ onBack }: { onBack: () => void }) => {
+  const queryClient = useQueryClient();
   const cats = [
     { name: "Shirts", icon: "👕" }, { name: "Pants", icon: "👖" },
     { name: "Bedsheets", icon: "🛏️" }, { name: "Blankets", icon: "🧣" },
@@ -1450,6 +1417,7 @@ const LaundryRequestScreen = ({ onBack }: { onBack: () => void }) => {
   ];
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [slot, setSlot] = useState("2–4 PM");
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   
@@ -1457,6 +1425,26 @@ const LaundryRequestScreen = ({ onBack }: { onBack: () => void }) => {
   const itemsValid = total > 0;
   const slotValid = slot.trim() !== "";
   const isFormValid = itemsValid && slotValid;
+
+  const handleSubmit = async () => {
+    if (!isFormValid || submitting) return;
+    setSubmitting(true);
+    try {
+      const items = Object.entries(counts)
+        .filter(([, qty]) => Number(qty) > 0)
+        .map(([name, qty]) => ({ name, qty }));
+
+      await apiClient.post("/v1/laundry", { items, notes: `Pickup slot: ${slot}` });
+      await queryClient.invalidateQueries({ queryKey: ["student-laundry"] });
+      setSubmitted(true);
+      toast.success("Laundry request submitted successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to submit laundry request.";
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (submitted) return (
     <div className="flex-1 flex flex-col">
@@ -1516,7 +1504,7 @@ const LaundryRequestScreen = ({ onBack }: { onBack: () => void }) => {
           {!itemsValid && <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={12} />At least 1 item required</p>}
         </Card>
 
-        <PrimaryBtn label={`Submit Request · ${total} items`} onClick={() => setSubmitted(true)} disabled={!isFormValid} />
+        <PrimaryBtn label={submitting ? "Submitting..." : `Submit Request · ${total} items`} onClick={handleSubmit} disabled={!isFormValid || submitting} />
       </div>
     </div>
   );
@@ -2098,6 +2086,7 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [complaintsData, setComplaintsData] = useState<any[]>([]);
   const [notificationsData, setNotificationsData] = useState<NotificationItem[]>([]);
+  const [laundryHistoryData, setLaundryHistoryData] = useState<Array<{ id: string; items: string; status: string; submitted: string }>>([]);
   const [loadingLeaves, setLoadingLeaves] = useState(false);
 
   const profileValue = profile;
@@ -2108,16 +2097,21 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
   const leaveBalanceValue = profileValue.leaveBalance ?? Math.max(0, 8 - leaveRequests.filter((l) => l.status === 'pending').length);
   const unread = notificationsData.filter(n => !n.read).length;
 
-  const normalizeLeave = (leave: any) => ({
-    id: leave.id ?? `LV-${String(Date.now()).slice(-6)}`,
-    reason: leave.reason ?? 'Leave request',
-    start: leave.fromDate ?? leave.start,
-    end: leave.toDate ?? leave.end,
-    applied: leave.appliedAt ? new Date(leave.appliedAt).toLocaleDateString('en-GB') : leave.createdAt ? new Date(leave.createdAt).toLocaleDateString('en-GB') : leave.applied || '-',
-    approvedBy: leave.status === 'PENDING' ? 'Pending' : 'Warden',
-    approvedAt: leave.approvedAt ? new Date(leave.approvedAt).toLocaleDateString('en-GB') : '-',
-    status: String(leave.status || 'pending').toLowerCase(),
-  });
+  const normalizeLeave = (leave: any) => {
+    const startDate = leave?.startDate ?? leave?.fromDate ?? leave?.start ?? '';
+    const endDate = leave?.endDate ?? leave?.toDate ?? leave?.end ?? '';
+
+    return {
+      id: leave?.id ?? `LV-${String(Date.now()).slice(-6)}`,
+      reason: leave?.reason ?? 'Leave request',
+      start: startDate,
+      end: endDate,
+      applied: leave?.appliedAt ? new Date(leave.appliedAt).toLocaleDateString('en-GB') : leave?.createdAt ? new Date(leave.createdAt).toLocaleDateString('en-GB') : leave?.applied || '-',
+      approvedBy: String(leave?.status || 'pending').toUpperCase() === 'PENDING' ? 'Pending' : 'Warden',
+      approvedAt: leave?.approvedAt ? new Date(leave.approvedAt).toLocaleDateString('en-GB') : '-',
+      status: String(leave?.status || 'pending').toLowerCase(),
+    };
+  };
 
   const normalizeComplaint = (item: any) => ({
     id: item.id,
@@ -2144,15 +2138,17 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
 
   const loadNotifications = async () => {
     try {
-      const data = await getNotifications();
-      setNotificationsData((data || []).map(normalizeNotification));
+      const { data } = await apiClient.get("/v1/notifications");
+      const payload = Array.isArray(data?.data) ? data.data : [];
+      setNotificationsData((payload || []).map(normalizeNotification));
     } catch {
       setNotificationsData([]);
     }
   };
 
   const handleCreateNotification = async (payload: { title: string; body: string; type?: string }) => {
-    const created = await createNotification(payload);
+    const { data } = await apiClient.post("/v1/notifications", payload);
+    const created = data?.data ?? data;
     setNotificationsData((prev) => [normalizeNotification(created), ...prev]);
     return created;
   };
@@ -2161,8 +2157,8 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
     const unreadItems = notificationsData.filter((n) => !n.read);
     if (!unreadItems.length) return;
 
-    const updatedItems = await Promise.all(unreadItems.map((item) => markNotificationAsRead(item.id)));
-    const updatedMap = new Map(updatedItems.map((item) => [item.id, item]));
+    const updatedItems = await Promise.all(unreadItems.map((item) => apiClient.patch(`/v1/notifications/${item.id}/read`, {})));
+    const updatedMap = new Map(updatedItems.map((item) => [item.id, item?.data?.data ?? item]));
 
     setNotificationsData((prev) => prev.map((item) => {
       const updated = updatedMap.get(item.id);
@@ -2171,51 +2167,132 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
     }));
   };
 
+  const attendanceSummaryQuery = useQuery({
+    queryKey: ["student-attendance-summary"],
+    queryFn: async () => {
+      const summary = await authService.getAttendanceSummary();
+      const payload = summary?.data ?? summary ?? {};
+      const chart = Array.isArray(payload?.daily)
+        ? payload.daily.slice(-6).map((entry: any) => ({
+            month: new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            present: Number(entry.present ?? 0),
+            absent: Number(entry.absent ?? 0),
+            leave: Number(entry.onLeave ?? entry.on_leave ?? entry.leave ?? 0),
+          }))
+        : [];
+
+      const overallAttendance = Number(payload?.overallPercentage ?? payload?.monthly?.percentage ?? payload?.hostel?.percentage ?? 0);
+      const presentTotal = Number(payload?.monthly?.present ?? 0);
+      const absentTotal = Number(payload?.monthly?.absent ?? 0);
+      const onLeaveTotal = Number(payload?.monthly?.onLeave ?? payload?.monthly?.on_leave ?? 0);
+
+      return {
+        overallAttendance,
+        departmentAttendance: Number(payload?.department?.percentage ?? payload?.departmentAttendance ?? 0),
+        hostelAttendance: Number(payload?.hostel?.percentage ?? payload?.hostelAttendance ?? 0),
+        dailySummary: Array.isArray(payload?.daily) ? `${presentTotal} present · ${absentTotal} absent · ${onLeaveTotal} leave` : "No data",
+        monthlySummary: overallAttendance ? `${overallAttendance}% attendance` : "No data",
+        chart,
+      };
+    },
+    staleTime: 30_000,
+  });
+
+  const profileQuery = useQuery({
+    queryKey: ["student-profile"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/v1/auth/me");
+      return normalizeProfile(data?.data ?? data ?? {});
+    },
+    staleTime: 60_000,
+  });
+
+  const leaveRequestsQuery = useQuery({
+    queryKey: ["student-leaves"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/v1/leave/student");
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const complaintsQuery = useQuery({
+    queryKey: ["student-complaints"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/v1/complaints/my");
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 30_000,
+  });
+
+  const notificationsQuery = useQuery({
+    queryKey: ["student-notifications"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/v1/notifications");
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 15_000,
+  });
+
+  const laundryQuery = useQuery({
+    queryKey: ["student-laundry"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/v1/laundry");
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+    staleTime: 15_000,
+  });
+
   useEffect(() => {
-    const loadDashboard = async () => {
-      setLoadingLeaves(true);
-          const [summaryRes, profileRes, attendanceRes, leaveRes, complaintsRes] = await Promise.allSettled([
-        authService.getAttendanceSummary(),
-        api.get('/auth/me'),
-        api.get('/attendance'),
-        api.get('/v1/leave/student'),
-        api.get('/v1/complaints/student'),
-      ]);
+    if (attendanceSummaryQuery.data) {
+      const data = attendanceSummaryQuery.data;
+      setAttendanceSummary({
+        overallAttendance: data.overallAttendance,
+        departmentAttendance: data.departmentAttendance,
+        hostelAttendance: data.hostelAttendance,
+        dailySummary: data.dailySummary,
+        monthlySummary: data.monthlySummary,
+      });
+      setAttendanceRecords(data.chart);
+    }
+  }, [attendanceSummaryQuery.data]);
 
-      if (summaryRes.status === 'fulfilled') {
-        const payload = (summaryRes.value as any)?.data ?? summaryRes.value ?? {};
-        const data = payload?.data ?? payload ?? {};
-        setAttendanceSummary({
-          overallAttendance: typeof data.overallAttendance === 'number' ? data.overallAttendance : (typeof data.overall === 'number' ? data.overall : 0),
-          departmentAttendance: typeof data.departmentAttendance === 'number' ? data.departmentAttendance : (typeof data.department === 'number' ? data.department : 0),
-          hostelAttendance: typeof data.hostelAttendance === 'number' ? data.hostelAttendance : (typeof data.hostel === 'number' ? data.hostel : 0),
-          dailySummary: data.dailySummary ?? data.daily ?? data.dailyAttendance ?? 'No data',
-          monthlySummary: data.monthlySummary ?? data.monthly ?? data.monthlyAttendance ?? 'No data',
-        });
-      }
+  useEffect(() => {
+    if (profileQuery.data) {
+      setProfile(profileQuery.data);
+    }
+  }, [profileQuery.data]);
 
-      if (profileRes.status === 'fulfilled' && profileRes.value?.data) {
-        setProfile(profileRes.value.data);
-      }
+  useEffect(() => {
+    if (leaveRequestsQuery.data) {
+      setLeaveRequests(leaveRequestsQuery.data.map(normalizeLeave));
+    }
+  }, [leaveRequestsQuery.data]);
 
-      if (attendanceRes.status === 'fulfilled' && Array.isArray(attendanceRes.value?.data)) {
-        setAttendanceRecords(attendanceRes.value.data);
-      }
+  useEffect(() => {
+    if (complaintsQuery.data) {
+      setComplaintsData(complaintsQuery.data.map(normalizeComplaint));
+    }
+  }, [complaintsQuery.data]);
 
-      if (leaveRes.status === 'fulfilled' && Array.isArray(leaveRes.value?.data)) {
-        setLeaveRequests(leaveRes.value.data.map(normalizeLeave));
-      }
+  useEffect(() => {
+    if (notificationsQuery.data) {
+      setNotificationsData(notificationsQuery.data.map(normalizeNotification));
+    }
+  }, [notificationsQuery.data]);
 
-      if (complaintsRes.status === 'fulfilled' && Array.isArray(complaintsRes.value?.data)) {
-        setComplaintsData(complaintsRes.value.data.map(normalizeComplaint));
-      }
-
-      setLoadingLeaves(false);
-      await loadNotifications();
-    };
-
-    loadDashboard();
-  }, []);
+  useEffect(() => {
+    if (laundryQuery.data) {
+      setLaundryHistoryData(
+        laundryQuery.data.map((item: any) => ({
+          id: item.id,
+          items: item.items?.map((record: any) => record.name).join(", ") || item.notes || "Laundry request",
+          status: String(item.status || "pending").toLowerCase(),
+          submitted: item.createdAt ? new Date(item.createdAt).toLocaleDateString("en-GB") : "Today",
+        })),
+      );
+    }
+  }, [laundryQuery.data]);
 
   const navigateTo = (s: Screen) => {
     setHistory(h => [...h, screen]);
@@ -2230,7 +2307,7 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
     contact: string;
     details: string;
   }) => {
-    const response = await api.post('/v1/leave', {
+    const leave = await api.post('/v1/leave', {
       type: 'HOME',
       startDate: request.startDate,
       endDate: request.endDate,
@@ -2239,22 +2316,18 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
       contactNumber: request.contact,
     });
 
-    const leave = response.data;
-    const submittedDate = new Date(leave.createdAt).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    const normalizedLeave = normalizeLeave(leave);
+    const submittedDate = leave?.createdAt
+      ? new Date(leave.createdAt).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
+      : normalizedLeave.applied;
 
     const newRequest = {
-      id: leave.id,
-      reason: leave.reason,
-      start: leave.startDate,
-      end: leave.endDate,
+      ...normalizedLeave,
       applied: submittedDate,
-      approvedBy: leave.status === 'PENDING' ? 'Pending' : 'Warden',
-      approvedAt: leave.approvedAt ? new Date(leave.approvedAt).toLocaleDateString('en-GB') : '-',
-      status: leave.status.toLowerCase(),
     };
 
     setLeaveRequests((prev) => [newRequest, ...prev]);
@@ -2279,14 +2352,14 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
       case "profile": return <ProfileScreen onBack={goBack} profile={profile} />;
       case "attendance": return <AttendanceScreen onBack={goBack} onNavigate={navigateTo} studentId={profile?.id} />;
       case "movement": return <MovementScreen onBack={goBack} />;
-      case "leave-request": return <LeaveRequestScreen onBack={goBack} onNavigate={navigateTo} onSubmit={handleLeaveRequestSubmit} />;
+      case "leave-request": return <LeaveRequestScreen onBack={goBack} onNavigate={navigateTo} onSubmit={handleLeaveRequestSubmit} leaveBalanceValue={leaveBalanceValue} />;
       case "leave-history": return <LeaveHistoryScreen onBack={goBack} leaveRequests={leaveRequests} />;
       case "curfew": return <CurfewScreen onBack={goBack} />;
       case "fees": return <FeesScreen onBack={goBack} studentId={profile?.id} />;
       case "fines": return <FinesScreen onBack={goBack} />;
       case "maintenance": return <MaintenanceScreen onBack={goBack} onNavigate={navigateTo} />;
       case "complaints": return <ComplaintsScreen onBack={goBack} complaints={complaintsData} />;
-      case "laundry-dashboard": return <LaundryDashboardScreen onBack={goBack} onNavigate={navigateTo} />;
+      case "laundry-dashboard": return <LaundryDashboardScreen onBack={goBack} onNavigate={navigateTo} laundryHistory={laundryHistoryData} />;
       case "laundry-request": return <LaundryRequestScreen onBack={goBack} />;
       case "visitor": return <VisitorScreen onBack={goBack} />;
       case "mess": return <MessScreen onBack={goBack} />;

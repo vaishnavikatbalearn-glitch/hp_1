@@ -1,14 +1,14 @@
+import { getStudentIdByUserId } from '../../utils/student';
 import { prisma } from '../../config/database';
 import { AppError } from '../../types/errors';
 import type { CreateVisitorBody, RejectVisitorBody } from './visitor.validation';
 
 export async function createVisitorRequest(userId: string, data: CreateVisitorBody) {
-  const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
-  if (!student) throw AppError.notFound('Student profile');
+  const studentId = await getStudentIdByUserId(userId);
 
   const visitor = await prisma.visitorRequest.create({
     data: {
-      studentId: student.id,
+      studentId,
       visitorName: data.visitorName,
       visitorPhone: data.visitorPhone,
       relation: data.relation ?? '',
@@ -25,10 +25,8 @@ export async function createVisitorRequest(userId: string, data: CreateVisitorBo
 }
 
 export async function getMyVisitorRequests(userId: string) {
-  const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
-  if (!student) throw AppError.notFound('Student profile');
-
-  return prisma.visitorRequest.findMany({ where: { studentId: student.id }, orderBy: { createdAt: 'desc' } });
+  const studentId = await getStudentIdByUserId(userId);
+  return prisma.visitorRequest.findMany({ where: { studentId }, orderBy: { createdAt: 'desc' } });
 }
 
 export async function getPendingVisitorRequests() {

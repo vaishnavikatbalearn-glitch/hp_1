@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/authenticate.middleware';
-import { validate, schemas } from '../../middleware/validate.middleware';
+import { validate } from '../../middleware/validate.middleware';
 import { requirePermission } from '../../middleware/rbac.middleware';
 import {
   markAttendance,

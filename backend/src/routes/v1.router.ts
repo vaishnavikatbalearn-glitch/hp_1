@@ -12,8 +12,9 @@ import laundryRouter from '../modules/laundry/laundry.routes';
 import attendanceRouter from '../modules/attendance/attendance.routes';
 import feesRouter from '../modules/fees/fees.routes';
 import notificationRouter from '../modules/notification/notification.routes';
+import studentRouter from '../modules/student/student.routes';
+import roomsRouter from '../modules/rooms/rooms.routes';
 // import userRouter from '../modules/user/user.routes';
-// import studentRouter from '../modules/student/student.routes';
 // etc.
 
 const v1Router = Router();
@@ -40,10 +41,10 @@ v1Router.use('/laundry', laundryRouter);
 v1Router.use('/attendance', attendanceRouter);
 v1Router.use('/fees', feesRouter);
 v1Router.use('/notifications', notificationRouter);
+v1Router.use('/student', studentRouter);
+v1Router.use('/rooms', roomsRouter);
 // v1Router.use('/users', userRouter);
 // v1Router.use('/hostels', hostelRouter);
-// v1Router.use('/students', studentRouter);
-// v1Router.use('/rooms', roomRouter);
 // v1Router.use('/fees', feesRouter);
 // v1Router.use('/fines', finesRouter);
 // v1Router.use('/maintenance', maintenanceRouter);

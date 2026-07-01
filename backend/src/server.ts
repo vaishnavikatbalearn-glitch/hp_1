@@ -16,7 +16,41 @@ import { logger } from './utils/logger';
 
 // ─── Shutdown State ───────────────────────────────────────────────────────────
 let isShuttingDown = false;
-let server: http.Server;
+let server: http.Server | undefined;
+
+async function listenWithFallback(app: ReturnType<typeof createApp>, basePort: number): Promise<[http.Server, number]> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const candidatePort = basePort + attempt;
+    const candidateServer = http.createServer(app);
+    candidateServer.keepAliveTimeout = 65_000;
+    candidateServer.headersTimeout = 66_000;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (err: NodeJS.ErrnoException) => {
+          candidateServer.off('error', onError);
+          reject(err);
+        };
+
+        candidateServer.once('error', onError);
+        candidateServer.listen(candidatePort, () => {
+          candidateServer.off('error', onError);
+          resolve();
+        });
+      });
+
+      return [candidateServer, candidatePort];
+    } catch (err) {
+      candidateServer.close(() => undefined);
+      if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error(`Unable to start server after multiple attempts on port ${basePort}`);
+}
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap(): Promise<void> {
@@ -29,28 +63,24 @@ async function bootstrap(): Promise<void> {
     logger.info('[Server] ✅ Database connected');
   } catch (err) {
     logger.error('[Server] ❌ Database connection failed', { error: err });
-    process.exit(1);
+    if (env.isProduction) {
+      // In production, fail fast
+      process.exit(1);
+    }
+    // In development, allow the server to start so non-DB routes and static checks can run.
+    logger.warn('[Server] Continuing startup in development mode without database connection');
   }
 
   // 2. Create Express app
   const app = createApp();
 
-  // 3. Create HTTP server
-  server = http.createServer(app);
+  // 3. Start listening with a port fallback when the preferred port is busy
+  const [listeningServer, listeningPort] = await listenWithFallback(app, env.PORT);
+  server = listeningServer;
 
-  // 4. Configure keep-alive timeouts (important for production behind a proxy)
-  server.keepAliveTimeout = 65_000; // slightly > nginx's default 60s
-  server.headersTimeout = 66_000;
-
-  // 5. Start listening
-  await new Promise<void>((resolve) => {
-    server.listen(env.PORT, () => {
-      logger.info(`[Server] ✅ Listening on http://localhost:${env.PORT}`);
-      logger.info(`[Server] 📡 API base: http://localhost:${env.PORT}${env.apiPrefix}`);
-      logger.info(`[Server] 🏥 Health:   http://localhost:${env.PORT}${env.apiPrefix}/health`);
-      resolve();
-    });
-  });
+  logger.info(`[Server] ✅ Listening on http://localhost:${listeningPort}`);
+  logger.info(`[Server] 📡 API base: http://localhost:${listeningPort}${env.apiPrefix}`);
+  logger.info(`[Server] 🏥 Health:   http://localhost:${listeningPort}${env.apiPrefix}/health`);
 }
 
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
@@ -64,6 +94,12 @@ async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`[Server] 🛑 ${signal} received — shutting down gracefully…`);
 
   // 1. Stop accepting new connections
+  if (!server) {
+    logger.warn('[Server] No active server to close');
+    process.exit(0);
+    return;
+  }
+
   server.close(async (err) => {
     if (err) {
       logger.error('[Server] Error closing HTTP server', { error: err });

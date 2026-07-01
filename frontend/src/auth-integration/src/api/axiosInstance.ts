@@ -14,13 +14,6 @@ export const apiClient = axios.create({
   },
 });
 
-// A separate client with no interceptors, used only for the refresh call
-// itself, so a failed refresh can't recursively trigger another refresh.
-const refreshClient = axios.create({
-  baseURL: BASE_URL,
-  withCredentials: true,
-});
-
 // --- Attach the in-memory access token to every outgoing request ---
 apiClient.interceptors.request.use((config) => {
   const token = tokenManager.getToken();
@@ -85,7 +78,7 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const { data } = await refreshClient.post<{ accessToken: string }>(AUTH_ENDPOINTS.REFRESH);
+      const { data } = await apiClient.post<{ accessToken: string }>(AUTH_ENDPOINTS.REFRESH);
       tokenManager.setToken(data.accessToken);
       flushQueue(null, data.accessToken);
 

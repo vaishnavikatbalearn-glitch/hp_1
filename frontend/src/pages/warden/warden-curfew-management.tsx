@@ -3,6 +3,9 @@ import { ArrowLeft, Clock, Edit } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
+// TODO: Connect to backend when /v1/settings or /v1/hostel/curfew endpoint is available
+// Currently displaying hardcoded curfew time
+
 export function WardenCurfewManagement() {
   const navigate = useNavigate();
   return (
@@ -18,7 +21,7 @@ export function WardenCurfewManagement() {
                 <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center"><Clock className="text-blue-600" size={20} /></div>
                 <div><p className="text-sm mb-1">Hostel Curfew</p><p className="text-xs text-muted-foreground">10:00 PM</p></div>
               </div>
-              <Button size="sm" variant="outline"><Edit size={14} /></Button>
+              <Button size="sm" variant="outline" disabled><Edit size={14} /></Button>
             </div>
           </Card>
         </div>

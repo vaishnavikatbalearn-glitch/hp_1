@@ -20,7 +20,7 @@ export const listLaundryRequests = asyncHandler(async (req: Request, res: Respon
 
 export const patchLaundryStatus = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  const laundryId = req.params.id;
+  const laundryId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const body = req.body as UpdateLaundryStatusBody;
   const updatedLaundry = await updateLaundryRequestStatus(laundryId, authReq.user.userId, authReq.user.role, body);
   return ApiResponse.ok(res, updatedLaundry, 'Laundry status updated');

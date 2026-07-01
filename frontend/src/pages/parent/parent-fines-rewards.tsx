@@ -1,26 +1,74 @@
+import { useEffect, useState } from 'react';
+
 import { useNavigate } from 'react-router';
 import { ArrowLeft, AlertCircle, Award, TrendingDown, TrendingUp } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { api, getFines, getRewards } from '../../services/api';
+
 
 export function ParentFinesRewards() {
+
   const navigate = useNavigate();
 
-  const fines = [
-    { id: 1, amount: 200, reason: "Late night entry", date: "Jun 15, 2026", status: "Paid" },
-    { id: 2, amount: 100, reason: "Missed curfew by 30 minutes", date: "May 20, 2026", status: "Paid" },
-  ];
+  const [fines, setFines] = useState<Array<{ id: string; amount: number; reason: string; date: string; status: string }>>([]);
+  const [rewards, setRewards] = useState<Array<{ id: string; name: string; points: number; achievement: string; date: string }>>([]);
 
-  const rewards = [
-    { id: 1, name: "Academic Excellence", points: 100, achievement: "Scored 95% in semester exams", date: "Jun 10, 2026" },
-    { id: 2, name: "Sports Champion", points: 75, achievement: "Won inter-hostel cricket tournament", date: "May 25, 2026" },
-    { id: 3, name: "Perfect Attendance", points: 50, achievement: "100% attendance in May", date: "May 31, 2026" },
-    { id: 4, name: "Community Service", points: 40, achievement: "Volunteered in campus cleanup", date: "Apr 15, 2026" },
-  ];
+  const [loading, setLoading] = useState(true);
 
-  const totalFines = fines.reduce((sum, fine) => sum + fine.amount, 0);
-  const totalRewards = rewards.reduce((sum, reward) => sum + reward.points, 0);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [fineItems, rewardItems] = await Promise.all([
+          getFines(),
+          getRewards(),
+        ]);
+
+
+
+        const mappedFines = fineItems.map((f: any) => {
+          const issuedAt = f.issuedAt ?? f.issuedDate;
+          const dueAt = f.dueDate;
+          const displayDate = issuedAt
+            ? new Date(issuedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : dueAt
+              ? new Date(dueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              : '—';
+
+          return {
+            id: String(f.id),
+            amount: Number(f.amount ?? 0),
+            reason: f.reason ? String(f.reason) : '—',
+            date: displayDate,
+            status: f.status ? String(f.status) : '—',
+          };
+        });
+
+        const mappedRewards = rewardItems.map((r: any) => ({
+          id: String(r.id),
+          name: r.rewardType ? String(r.rewardType) : '—',
+          points: Number(r.points ?? 0),
+          achievement: r.reason ? String(r.reason) : '—',
+          date: r.awardedDate
+            ? new Date(r.awardedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '—',
+        }));
+
+
+        setFines(mappedFines);
+        setRewards(mappedRewards);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void load();
+  }, []);
+
+  const totalFines = fines.reduce((sum: number, fine) => sum + (Number(fine.amount) || 0), 0);
+  const totalRewards = rewards.reduce((sum: number, reward) => sum + (Number(reward.points) || 0), 0);
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -113,9 +161,9 @@ export function ParentFinesRewards() {
                             <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center flex-shrink-0">
                               <AlertCircle className="text-red-600" size={24} />
                             </div>
-                            <div className="flex-1">
-                              <div className="flex items-start justify-between mb-2">
-                                <h4 className="text-sm">{fine.reason}</h4>
+                      <div className="flex-1">
+                            <div className="flex items-start justify-between mb-2">
+                              <h4 className="text-sm">{fine.reason}</h4>
                                 <p className="text-base">₹{fine.amount}</p>
                               </div>
                               <div className="flex items-center justify-between">

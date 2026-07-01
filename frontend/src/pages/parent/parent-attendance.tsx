@@ -1,35 +1,120 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Calendar, TrendingUp, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { api } from '../../services/api';
+
+interface AttendanceSummaryState {
+  todayStatus: string;
+  percentage: number;
+  monthlyPresent: number;
+  monthlyAbsent: number;
+  monthlyLateEntries: number;
+  trend: string;
+}
+
+interface AttendanceRecordState {
+  date: string;
+  status: string;
+  entry: string;
+  exit: string;
+}
 
 export function ParentAttendance() {
   const navigate = useNavigate();
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [attendanceData, setAttendanceData] = useState<AttendanceSummaryState>({
+    todayStatus: 'Loading...',
+    percentage: 0,
+    monthlyPresent: 0,
+    monthlyAbsent: 0,
+    monthlyLateEntries: 0,
+    trend: '0%',
+  });
+  const [monthlyAttendance, setMonthlyAttendance] = useState<AttendanceRecordState[]>([]);
 
-  const attendanceData = {
-    todayStatus: "Present",
-    percentage: 94,
-    monthlyPresent: 26,
-    monthlyAbsent: 2,
-    monthlyLateEntries: 1,
-    totalDays: 28,
-    trend: "+2.5%",
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  const monthlyAttendance = [
-    { date: "Jun 1", status: "Present", entry: "8:45 AM", exit: "6:30 PM" },
-    { date: "Jun 2", status: "Present", entry: "8:50 AM", exit: "7:00 PM" },
-    { date: "Jun 3", status: "Absent", entry: "-", exit: "-" },
-    { date: "Jun 4", status: "Present", entry: "8:30 AM", exit: "6:15 PM" },
-    { date: "Jun 5", status: "Present", entry: "9:15 AM", exit: "6:45 PM" },
-    { date: "Jun 6", status: "Late Entry", entry: "10:30 AM", exit: "7:30 PM" },
-    { date: "Jun 7", status: "Present", entry: "8:45 AM", exit: "6:00 PM" },
-    { date: "Jun 8", status: "Present", entry: "8:35 AM", exit: "6:20 PM" },
-  ];
+    const loadAttendance = async () => {
+      try {
+        const profile = await api.get<any>('v1/auth/me');
+        const studentId = profile?.studentProfile?.id ?? profile?.studentId ?? profile?.id;
+        const attendanceRecords = studentId
+          ? await api.get<any[]>(`v1/attendance/student/${studentId}`)
+          : [];
+        const records = Array.isArray(attendanceRecords) ? attendanceRecords : [];
+        const todayString = new Date().toISOString().slice(0, 10);
+        const todayRecord = records.find((record: any) => String(record?.date || '').slice(0, 10) === todayString);
+        const latestRecord = records[0] ?? records[records.length - 1];
+
+        const getStatus = (record: any) => {
+          if (!record) return 'No data';
+          const status = String(record.status || '').toUpperCase();
+          if (status === 'PRESENT') return 'Present';
+          if (status === 'ABSENT') return 'Absent';
+          if (status === 'ON_LEAVE') return 'Leave';
+          return 'No data';
+        };
+
+        const filteredMonthRecords = records.filter((record: any) => {
+          const date = record?.date ? new Date(record.date) : null;
+          if (!date || Number.isNaN(date.getTime())) return false;
+          const now = new Date();
+          return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+        });
+
+        const monthlyPresent = filteredMonthRecords.reduce((sum: number, record: any) => sum + (String(record?.status || '').toUpperCase() === 'PRESENT' ? 1 : 0), 0);
+        const monthlyAbsent = filteredMonthRecords.reduce((sum: number, record: any) => sum + (String(record?.status || '').toUpperCase() === 'ABSENT' ? 1 : 0), 0);
+        const monthlyLateEntries = filteredMonthRecords.reduce((sum: number, record: any) => sum + (String(record?.status || '').toUpperCase() === 'ON_LEAVE' ? 1 : 0), 0);
+        const totalMonth = monthlyPresent + monthlyAbsent + monthlyLateEntries;
+        const percentage = totalMonth ? Math.round((monthlyPresent / totalMonth) * 100) : 0;
+        const trendValue = percentage ? `${percentage >= 100 ? '+' : ''}${percentage - 100}` : '0%';
+
+        const nextAttendanceData = {
+          todayStatus: getStatus(todayRecord ?? latestRecord),
+          percentage,
+          monthlyPresent,
+          monthlyAbsent,
+          monthlyLateEntries,
+          trend: trendValue,
+        };
+
+        const mappedRecords = records.slice(0, 8).map((record: any) => ({
+          date: new Date(record?.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+          status: getStatus(record),
+          entry: '—',
+          exit: '—',
+        }));
+
+        if (isMounted) {
+          setAttendanceData(nextAttendanceData);
+          setMonthlyAttendance(mappedRecords);
+        }
+      } catch {
+        if (isMounted) {
+          setAttendanceData({
+            todayStatus: 'Unavailable',
+            percentage: 0,
+            monthlyPresent: 0,
+            monthlyAbsent: 0,
+            monthlyLateEntries: 0,
+            trend: '0%',
+          });
+          setMonthlyAttendance([]);
+        }
+      }
+    };
+
+    void loadAttendance();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -56,12 +141,12 @@ export function ParentAttendance() {
           <div className="px-6 py-6 bg-gradient-to-br from-green-50 to-emerald-50">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-base">Today's Status</h2>
-              <Badge className="bg-green-500 text-white">
-                <CheckCircle2 size={12} className="mr-1" />
+              <Badge className={attendanceData.todayStatus === 'Present' ? 'bg-green-500 text-white' : attendanceData.todayStatus === 'Absent' ? 'bg-red-500 text-white' : 'bg-amber-500 text-white'}>
+                {attendanceData.todayStatus === 'Present' ? <CheckCircle2 size={12} className="mr-1" /> : attendanceData.todayStatus === 'Absent' ? <XCircle size={12} className="mr-1" /> : <Clock size={12} className="mr-1" />}
                 {attendanceData.todayStatus}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">June 20, 2026 • Saturday</p>
+            <p className="text-sm text-muted-foreground">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date().toLocaleDateString('en-US', { weekday: 'long' })}</p>
           </div>
 
           {/* Attendance Stats */}
@@ -144,7 +229,9 @@ export function ParentAttendance() {
             <h3 className="text-base mb-4">Recent Attendance</h3>
             <Card className="bg-card border-border">
               <div className="divide-y divide-border">
-                {monthlyAttendance.map((record, index) => (
+                {monthlyAttendance.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">No attendance records found.</div>
+                ) : monthlyAttendance.map((record, index) => (
                   <div key={index} className="p-4">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-3">

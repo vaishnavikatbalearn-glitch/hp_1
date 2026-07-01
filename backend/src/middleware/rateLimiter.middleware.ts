@@ -1,10 +1,15 @@
 import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
+import { Request, Response, NextFunction } from 'express';
 import { env } from '../config/env';
 import { AppError } from '../types/errors';
 
 // ─── Rate Limit Handler ───────────────────────────────────────────────────────
-const rateLimitExceededHandler = (): never => {
-  throw AppError.tooManyRequests('Too many requests, please try again later.');
+const rateLimitExceededHandler = (
+  _req: Request,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  next(AppError.tooManyRequests('Too many requests, please try again later.'));
 };
 
 // ─── Global Rate Limiter ──────────────────────────────────────────────────────

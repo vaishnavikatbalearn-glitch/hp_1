@@ -3,6 +3,9 @@ import { ArrowLeft, Plus, Award } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
+// TODO: Replace with live API when /v1/rewards endpoint is available
+// Ready for integration with getRewards() and createReward() from services/api
+
 export function WardenRewardManagement() {
   const navigate = useNavigate();
   const rewards = [

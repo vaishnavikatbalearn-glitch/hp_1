@@ -1,44 +1,54 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { api } from '../../services/api';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
+import { DataList } from '@/components/shared/DataList';
+import { useDataList } from '@/hooks/useDataList';
+import { formatDateRange, getInitials } from '@/utils/formatters';
+
+interface LeaveRequest {
+  id: string;
+  studentId: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  destination: string;
+  contactNumber: string;
+  student?: {
+    firstName: string;
+    lastName: string;
+  };
+}
 
 export function WardenLeaveApprovals() {
   const navigate = useNavigate();
-  const [leaves, setLeaves] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    const loadLeaves = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const response = await api.get<{ data: any[] }>('/v1/leave/warden');
-        setLeaves(response.data ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unable to load pending leave requests.');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const leavesQuery = useQuery({
+    queryKey: ['leave-approvals'],
+    queryFn: async () => {
+      const response = await apiClient.get<{ data: LeaveRequest[] }>('/v1/leave/warden');
+      return response.data.data ?? [];
+    },
+  });
 
-    loadLeaves();
-  }, []);
+  const { data: leaves, isPending, isEmpty } = useDataList(leavesQuery);
 
   const handleApprove = async (leaveId: string) => {
     setActionLoading((prev) => ({ ...prev, [leaveId]: true }));
     setError('');
     setSuccess('');
     try {
-      await api.patch(`/v1/leave/${leaveId}/approve`, {});
-      setLeaves((prev) => prev.filter((item) => item.id !== leaveId));
+      await apiClient.patch(`/v1/leave/${leaveId}/approve`, {});
       setSuccess('Leave request approved successfully.');
+      queryClient.invalidateQueries({ queryKey: ['leave-approvals'] });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to approve leave request.');
     } finally {
@@ -54,9 +64,9 @@ export function WardenLeaveApprovals() {
     setError('');
     setSuccess('');
     try {
-      await api.patch(`/v1/leave/${leaveId}/reject`, { rejectionReason: reason.trim() });
-      setLeaves((prev) => prev.filter((item) => item.id !== leaveId));
+      await apiClient.patch(`/v1/leave/${leaveId}/reject`, { rejectionReason: reason.trim() });
       setSuccess('Leave request rejected successfully.');
+      queryClient.invalidateQueries({ queryKey: ['leave-approvals'] });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to reject leave request.');
     } finally {
@@ -80,53 +90,60 @@ export function WardenLeaveApprovals() {
         </div>
 
         <div className="flex-1 overflow-auto pb-6 px-6 py-6">
-          {loading ? (
-            <p className="text-sm text-slate-500">Loading pending leave requests…</p>
-          ) : error ? (
-            <Card className="bg-red-50 border border-red-200 p-4 text-red-700">{error}</Card>
-          ) : success ? (
-            <Card className="bg-emerald-50 border border-emerald-200 p-4 text-emerald-700">{success}</Card>
+          {error ? (
+            <Card className="bg-red-50 border border-red-200 p-4 text-red-700 mb-4">{error}</Card>
           ) : null}
 
-          {leaves.length === 0 && !loading && !error ? (
-            <Card className="bg-white border border-slate-200 p-6 text-center text-slate-600">
-              No pending leave requests at the moment.
-            </Card>
-          ) : (
-            leaves.map((leave) => {
-              const studentName = leave.student ? `${leave.student.firstName} ${leave.student.lastName}` : 'Student';
-              const duration = `${new Date(leave.startDate).toLocaleDateString('en-GB')} - ${new Date(leave.endDate).toLocaleDateString('en-GB')}`;
+          {success ? (
+            <Card className="bg-emerald-50 border border-emerald-200 p-4 text-emerald-700 mb-4">{success}</Card>
+          ) : null}
+
+          <DataList
+            data={leaves}
+            isPending={isPending}
+            isEmpty={isEmpty}
+            emptyMessage="No pending leave requests at the moment"
+            loadingMessage="Loading pending leave requests…"
+          >
+            {(leave) => {
+              const studentName = leave.student
+                ? `${leave.student.firstName} ${leave.student.lastName}`
+                : 'Student';
+              const duration = formatDateRange(leave.startDate, leave.endDate);
               return (
                 <Card key={leave.id} className="bg-card border-border mb-4">
                   <div className="p-4">
                     <div className="flex items-start space-x-3 mb-3">
                       <Avatar className="w-12 h-12">
-                        <AvatarFallback>{studentName.split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</AvatarFallback>
+                        <AvatarFallback>
+                          {getInitials(leave.student?.firstName, leave.student?.lastName)}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <p className="text-sm mb-1 font-semibold text-slate-900">{studentName}</p>
-                        <p className="text-xs text-muted-foreground mb-1">{leave.reason}</p>
+                        <p className="text-sm font-medium">{studentName}</p>
                         <p className="text-xs text-muted-foreground">{duration}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-xs text-slate-500 mb-4">
-                      <div>
-                        <p className="font-semibold text-slate-700">Destination</p>
-                        <p>{leave.destination}</p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-700">Contact</p>
-                        <p>{leave.contactNumber}</p>
-                      </div>
+                    <div className="mb-3">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Reason:</span> {leave.reason}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Destination:</span> {leave.destination}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Contact:</span> {leave.contactNumber}
+                      </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="flex space-x-2">
                       <Button
                         size="sm"
                         className="flex-1 bg-green-500 hover:bg-green-600 text-white"
                         onClick={() => handleApprove(leave.id)}
                         disabled={actionLoading[leave.id]}
                       >
-                        <CheckCircle size={14} className="mr-1" />Approve
+                        <CheckCircle size={14} className="mr-1" />
+                        Approve
                       </Button>
                       <Button
                         size="sm"
@@ -135,14 +152,15 @@ export function WardenLeaveApprovals() {
                         onClick={() => handleReject(leave.id)}
                         disabled={actionLoading[leave.id]}
                       >
-                        <XCircle size={14} className="mr-1" />Reject
+                        <XCircle size={14} className="mr-1" />
+                        Reject
                       </Button>
                     </div>
                   </div>
                 </Card>
               );
-            })
-          )}
+            }}
+          </DataList>
         </div>
       </div>
     </div>

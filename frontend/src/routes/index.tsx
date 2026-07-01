@@ -1,12 +1,10 @@
 // ─── HostelPaglu Route Configuration ─────────────────────────────────────────
 // Handles all role-based routing and cross-project navigation.
 
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter } from "react-router-dom";
 import RootLayout from "@/layouts/RootLayout";
 import AuthFlow from "@/pages/auth/AuthFlow";
 import StudentPortal from "@/pages/student/StudentPortal";
-import ParentPortal from "@/pages/parent/ParentPortal";
-import WardenPortal from "@/pages/warden/WardenPortal";
 import StaffPortal from "@/pages/admin/StaffPortal";
 
 // ─── Individual Parent screens (react-router routes from P3) ─────────────────
@@ -51,7 +49,7 @@ import { WardenNotifications } from "@/pages/warden/warden-notifications";
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: RootLayout,
+    element: <RootLayout />,
     children: [
       // ── Auth (P1 screens) ──────────────────────────────────────────
       { index: true, element: <AuthFlow onAuthComplete={() => {}} /> },
@@ -61,43 +59,43 @@ export const router = createBrowserRouter([
       { path: "student", element: <StudentPortal onLogout={() => {}} /> },
 
       // ── Parent (P3 screens via react-router) ───────────────────────
-      { path: "parent", Component: ParentDashboard },
-      { path: "parent/attendance", Component: ParentAttendance },
-      { path: "parent/movement-history", Component: ParentMovementHistory },
-      { path: "parent/leave-tracking", Component: ParentLeaveTracking },
-      { path: "parent/fees-tracking", Component: ParentFeesTracking },
-      { path: "parent/fines-rewards", Component: ParentFinesRewards },
-      { path: "parent/notifications", Component: ParentNotifications },
-      { path: "parent/notice-board", Component: ParentNoticeBoard },
-      { path: "parent/event-gallery", Component: ParentEventGallery },
-      { path: "parent/student-overview", Component: ParentStudentOverview },
-      { path: "parent/settings", Component: ParentSettings },
+      { path: "parent", element: <ParentDashboard /> },
+      { path: "parent/attendance", element: <ParentAttendance /> },
+      { path: "parent/movement-history", element: <ParentMovementHistory /> },
+      { path: "parent/leave-tracking", element: <ParentLeaveTracking /> },
+      { path: "parent/fees-tracking", element: <ParentFeesTracking /> },
+      { path: "parent/fines-rewards", element: <ParentFinesRewards /> },
+      { path: "parent/notifications", element: <ParentNotifications /> },
+      { path: "parent/notice-board", element: <ParentNoticeBoard /> },
+      { path: "parent/event-gallery", element: <ParentEventGallery /> },
+      { path: "parent/student-overview", element: <ParentStudentOverview /> },
+      { path: "parent/settings", element: <ParentSettings /> },
 
       // ── Warden (P3 screens via react-router) ──────────────────────
-      { path: "warden", Component: WardenDashboard },
-      { path: "warden/students", Component: WardenStudentManagement },
-      { path: "warden/students/:id", Component: WardenStudentDetails },
-      { path: "warden/parent-photo-view/:id", Component: WardenParentPhotoView },
-      { path: "warden/face-enrollment/:id", Component: WardenFaceEnrollment },
-      { path: "warden/attendance", Component: WardenAttendanceMonitoring },
-      { path: "warden/movement", Component: WardenMovementMonitoring },
-      { path: "warden/absentee", Component: WardenAbsenteeList },
-      { path: "warden/curfew", Component: WardenCurfewManagement },
-      { path: "warden/curfew-extensions", Component: WardenCurfewExtensions },
-      { path: "warden/leave-approvals", Component: WardenLeaveApprovals },
-      { path: "warden/rooms", Component: WardenRoomManagement },
-      { path: "warden/floors", Component: WardenFloorManagement },
-      { path: "warden/capacity", Component: WardenCapacityManagement },
-      { path: "warden/complaints", Component: WardenComplaintManagement },
-      { path: "warden/laundry", Component: WardenLaundryMonitoring },
-      { path: "warden/visitors", Component: WardenVisitorApprovals },
-      { path: "warden/fines", Component: WardenFineManagement },
-      { path: "warden/rewards", Component: WardenRewardManagement },
-      { path: "warden/notice-board", Component: WardenNoticeBoardManagement },
-      { path: "warden/events", Component: WardenEventManagement },
-      { path: "warden/initiatives", Component: WardenInitiativeModeration },
-      { path: "warden/reports", Component: WardenReports },
-      { path: "warden/notifications", Component: WardenNotifications },
+      { path: "warden", element: <WardenDashboard /> },
+      { path: "warden/students", element: <WardenStudentManagement /> },
+      { path: "warden/students/:id", element: <WardenStudentDetails /> },
+      { path: "warden/parent-photo-view/:id", element: <WardenParentPhotoView /> },
+      { path: "warden/face-enrollment/:id", element: <WardenFaceEnrollment /> },
+      { path: "warden/attendance", element: <WardenAttendanceMonitoring /> },
+      { path: "warden/movement", element: <WardenMovementMonitoring /> },
+      { path: "warden/absentee", element: <WardenAbsenteeList /> },
+      { path: "warden/curfew", element: <WardenCurfewManagement /> },
+      { path: "warden/curfew-extensions", element: <WardenCurfewExtensions /> },
+      { path: "warden/leave-approvals", element: <WardenLeaveApprovals /> },
+      { path: "warden/rooms", element: <WardenRoomManagement /> },
+      { path: "warden/floors", element: <WardenFloorManagement /> },
+      { path: "warden/capacity", element: <WardenCapacityManagement /> },
+      { path: "warden/complaints", element: <WardenComplaintManagement /> },
+      { path: "warden/laundry", element: <WardenLaundryMonitoring /> },
+      { path: "warden/visitors", element: <WardenVisitorApprovals /> },
+      { path: "warden/fines", element: <WardenFineManagement /> },
+      { path: "warden/rewards", element: <WardenRewardManagement /> },
+      { path: "warden/notice-board", element: <WardenNoticeBoardManagement /> },
+      { path: "warden/events", element: <WardenEventManagement /> },
+      { path: "warden/initiatives", element: <WardenInitiativeModeration /> },
+      { path: "warden/reports", element: <WardenReports /> },
+      { path: "warden/notifications", element: <WardenNotifications /> },
 
       // ── Staff portals (P4 screens) ─────────────────────────────────
       { path: "superadmin", element: <StaffPortal role="superadmin" onLogout={() => {}} /> },

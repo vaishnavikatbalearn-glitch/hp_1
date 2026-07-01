@@ -2,9 +2,69 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, Download, FileText, Calendar, Users, DollarSign, AlertCircle, Home } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
+
+function downloadCSV(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export function WardenReports() {
   const navigate = useNavigate();
+  const handleDownload = async (reportName: string) => {
+    try {
+      if (reportName === 'Attendance Report') {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        const { data } = await apiClient.get('/v1/attendance/summary', { params: { month, year } });
+        const payload = data?.data ?? data ?? {};
+        const daily = Array.isArray(payload?.daily) ? payload.daily : [];
+        const lines = ['date,present,absent,onLeave,late'];
+        daily.forEach((d: any) => {
+          const date = d.date ?? '';
+          const present = d.present ?? 0;
+          const absent = d.absent ?? 0;
+          const onLeave = d.onLeave ?? d.on_leave ?? 0;
+          const late = d.late ?? 0;
+          lines.push(`${date},${present},${absent},${onLeave},${late}`);
+        });
+        const summary = payload?.monthly ?? payload?.hostel ?? {};
+        lines.push('');
+        lines.push('Summary');
+        lines.push(`total,${summary?.total ?? ''}`);
+        lines.push(`present,${summary?.present ?? ''}`);
+        lines.push(`absent,${summary?.absent ?? ''}`);
+        lines.push(`onLeave,${summary?.onLeave ?? summary?.on_leave ?? ''}`);
+        lines.push(`late,${summary?.late ?? ''}`);
+        downloadCSV(`attendance-report-${year}-${String(month).padStart(2, '0')}.csv`, lines.join('\n'));
+      } else {
+        // For other reports, call corresponding endpoints when implemented
+        // Keep UI unchanged per constraint
+        const endpointMap: Record<string, string> = {
+          'Leave Report': '/v1/leave/report',
+          'Fee Report': '/v1/fees/report',
+          'Complaint Report': '/v1/complaints/report',
+          'Occupancy Report': '/v1/rooms/report',
+        };
+        const endpoint = endpointMap[reportName];
+        if (!endpoint) return;
+        const { data } = await apiClient.get(endpoint);
+        const content = JSON.stringify(data?.data ?? data ?? {}, null, 2);
+        downloadCSV(`${reportName.replace(/\s+/g, '-').toLowerCase()}.json`, content);
+      }
+    } catch (err) {
+      // silent fail to avoid UI changes; in future show toast
+      // console.error(err);
+    }
+  };
   const reports = [
     { name: 'Attendance Report', icon: Calendar, description: 'Monthly attendance summary', color: 'bg-green-100', iconColor: 'text-green-600' },
     { name: 'Leave Report', icon: FileText, description: 'Leave requests and approvals', color: 'bg-blue-100', iconColor: 'text-blue-600' },
@@ -33,7 +93,7 @@ export function WardenReports() {
                           <p className="text-xs text-muted-foreground">{r.description}</p>
                         </div>
                       </div>
-                      <Button size="sm" variant="outline"><Download size={14} /></Button>
+                      <Button size="sm" variant="outline" onClick={() => handleDownload(r.name)}><Download size={14} /></Button>
                     </div>
                   </div>
                 </Card>

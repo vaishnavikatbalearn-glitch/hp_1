@@ -4,6 +4,9 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+// TODO: Replace with live API when /v1/notices endpoint is available
+// Ready for integration with getNotices() and createNotice() from services/api
+
 export function WardenNoticeBoardManagement() {
   const navigate = useNavigate();
   const notices = [

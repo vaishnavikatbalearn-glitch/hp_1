@@ -3,12 +3,14 @@ import { ArrowLeft, LogIn, LogOut, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
+// TODO: Replace with live API when /v1/movement or /v1/gate-pass endpoint is available
+const movements = [
+  { student: 'Rahul Sharma', room: 'A-204', exitTime: '8:30 AM', entryTime: 'In Progress', duration: '2h 30m', status: 'Outside' },
+  { student: 'Priya Singh', room: 'B-105', exitTime: '9:00 AM', entryTime: '6:30 PM', duration: '9h 30m', status: 'Returned' },
+];
+
 export function WardenMovementMonitoring() {
   const navigate = useNavigate();
-  const movements = [
-    { student: 'Rahul Sharma', room: 'A-204', exitTime: '8:30 AM', entryTime: 'In Progress', duration: '2h 30m', status: 'Outside' },
-    { student: 'Priya Singh', room: 'B-105', exitTime: '9:00 AM', entryTime: '6:30 PM', duration: '9h 30m', status: 'Returned' },
-  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

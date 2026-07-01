@@ -49,14 +49,14 @@ export const getWardenLeaves = asyncHandler(async (_req: Request, res: Response)
 
 export const approveLeave = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  const leaveId = req.params.id;
+  const leaveId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const leave = await approveLeaveRequest(leaveId, authReq.user.userId);
   return ApiResponse.ok(res, formatLeave(leave), 'Leave request approved');
 });
 
 export const rejectLeave = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  const leaveId = req.params.id;
+  const leaveId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const body = req.body as RejectLeaveRequestBody;
   const leave = await rejectLeaveRequest(leaveId, authReq.user.userId, body);
   return ApiResponse.ok(res, formatLeave(leave), 'Leave request rejected');

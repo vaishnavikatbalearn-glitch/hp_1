@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, User, GraduationCap, Home, Calendar, Award, DollarSign } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { api } from '../../services/api';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
 
 interface StudentProfileData {
   name: string;
@@ -34,19 +34,71 @@ interface StudentProfileData {
 
 export function ParentStudentOverview() {
   const navigate = useNavigate();
-  const [studentData, setStudentData] = useState<StudentProfileData>({
-    name: "",
-    enrollmentNumber: "",
-    photo: "",
-    department: "",
-    semester: "",
-    year: "",
-    roomNumber: "",
-    floorNumber: "",
-    blockName: "",
-    phone: "",
-    email: "",
-    guardian: "",
+
+  const overviewQuery = useQuery({
+    queryKey: ['parent-student-overview'],
+    queryFn: async () => {
+      const [{ data: profileResponse }, { data: attendanceResponse }, { data: leaveResponse }, { data: feeResponse }] = await Promise.all([
+        apiClient.get('/v1/auth/me'),
+        apiClient.get('/v1/attendance/summary'),
+        apiClient.get('/v1/leave/student'),
+        apiClient.get('/v1/fees/pending'),
+      ]);
+
+      const payload = profileResponse?.data ?? profileResponse ?? {};
+      const profile = payload?.studentProfile ?? payload?.profile ?? payload?.student ?? {};
+      const attendance = attendanceResponse?.data ?? attendanceResponse ?? {};
+      const leaves = Array.isArray(leaveResponse?.data) ? leaveResponse.data : [];
+      const fees = Array.isArray(feeResponse?.data) ? feeResponse.data : [];
+      const dailyEntries = Array.isArray(attendance?.daily) ? attendance.daily : [];
+
+      const studentData: StudentProfileData = {
+        name: [payload?.firstName, payload?.lastName].filter(Boolean).join(' ') || profile?.name || payload?.name || 'Student',
+        enrollmentNumber: payload?.enrollmentNumber || profile?.enrollmentNumber || payload?.enrollment || profile?.enrollment || '',
+        photo: payload?.photo || profile?.photo || '',
+        department: profile?.department || profile?.branch || profile?.major || payload?.department || payload?.branch || '',
+        semester: profile?.semester || payload?.semester || '',
+        year: profile?.year || profile?.academicYear || payload?.year || '',
+        roomNumber: profile?.roomNumber || profile?.room || profile?.roomNo || payload?.roomNumber || payload?.room || '',
+        floorNumber: profile?.floorNumber || profile?.floor || payload?.floorNumber || payload?.floor || '',
+        blockName: profile?.blockName || profile?.block || payload?.blockName || payload?.block || '',
+        phone: payload?.phone || profile?.phone || profile?.mobile || payload?.mobile || '',
+        email: payload?.email || profile?.email || '',
+        guardian: profile?.guardianName || profile?.parentName || payload?.guardianName || payload?.parentName || '',
+        attendancePercentage: Number(attendance?.overallPercentage ?? attendance?.monthly?.percentage ?? attendance?.hostel?.percentage ?? 0),
+        totalPresent: dailyEntries.reduce((sum: number, entry: any) => sum + Number(entry?.present ?? 0), 0),
+        totalAbsent: dailyEntries.reduce((sum: number, entry: any) => sum + Number(entry?.absent ?? 0), 0),
+        totalLeaves: leaves.length,
+        approvedLeaves: leaves.filter((item: any) => String(item?.status || '').toUpperCase() === 'APPROVED').length,
+        rejectedLeaves: leaves.filter((item: any) => String(item?.status || '').toUpperCase() === 'REJECTED').length,
+        totalFees: fees.reduce((sum: number, fee: any) => sum + Number(fee?.amount ?? 0), 0),
+        paidFees: fees.reduce((sum: number, fee: any) => sum + Number(fee?.paidAmount ?? 0), 0),
+        pendingFees: fees.reduce((sum: number, fee: any) => {
+          const amount = Number(fee?.amount ?? 0);
+          const paid = Number(fee?.paidAmount ?? 0);
+          return sum + Math.max(amount - paid, 0);
+        }, 0),
+        achievements: Array.isArray(profile?.achievements) ? profile.achievements : [],
+      };
+
+      return studentData;
+    },
+    staleTime: 60_000,
+  });
+
+  const studentData = overviewQuery.data ?? {
+    name: 'Student',
+    enrollmentNumber: '',
+    photo: '',
+    department: '',
+    semester: '',
+    year: '',
+    roomNumber: '',
+    floorNumber: '',
+    blockName: '',
+    phone: '',
+    email: '',
+    guardian: '',
     attendancePercentage: 0,
     totalPresent: 0,
     totalAbsent: 0,
@@ -57,63 +109,8 @@ export function ParentStudentOverview() {
     paidFees: 0,
     pendingFees: 0,
     achievements: [],
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadProfile = async () => {
-      setLoading(true);
-      try {
-        const payload = await api.get('/auth/me') as any;
-        const data = payload?.data ?? payload;
-        const profile = data?.studentProfile ?? data?.profile ?? data?.student ?? {};
-        const name = [data?.firstName, data?.lastName].filter(Boolean).join(' ') || profile?.name || data?.name || 'Student';
-
-        if (isMounted) {
-          setStudentData({
-            name,
-            enrollmentNumber: data?.enrollmentNumber || profile?.enrollmentNumber || data?.enrollment || profile?.enrollment || '',
-            photo: data?.photo || profile?.photo || '',
-            department: profile?.department || profile?.branch || profile?.major || data?.department || data?.branch || '',
-            semester: profile?.semester || data?.semester || '',
-            year: profile?.year || profile?.academicYear || data?.year || '',
-            roomNumber: profile?.roomNumber || profile?.room || profile?.roomNo || data?.roomNumber || data?.room || '',
-            floorNumber: profile?.floorNumber || profile?.floor || data?.floorNumber || data?.floor || '',
-            blockName: profile?.blockName || profile?.block || data?.blockName || data?.block || '',
-            phone: data?.phone || profile?.phone || profile?.mobile || data?.mobile || '',
-            email: data?.email || profile?.email || '',
-            guardian: profile?.guardianName || profile?.parentName || data?.guardianName || data?.parentName || '',
-            attendancePercentage: Number(profile?.attendancePercentage ?? data?.attendancePercentage ?? 0),
-            totalPresent: Number(profile?.totalPresent ?? data?.totalPresent ?? 0),
-            totalAbsent: Number(profile?.totalAbsent ?? data?.totalAbsent ?? 0),
-            totalLeaves: Number(profile?.totalLeaves ?? data?.totalLeaves ?? 0),
-            approvedLeaves: Number(profile?.approvedLeaves ?? data?.approvedLeaves ?? 0),
-            rejectedLeaves: Number(profile?.rejectedLeaves ?? data?.rejectedLeaves ?? 0),
-            totalFees: Number(profile?.totalFees ?? data?.totalFees ?? 0),
-            paidFees: Number(profile?.paidFees ?? data?.paidFees ?? 0),
-            pendingFees: Number(profile?.pendingFees ?? data?.pendingFees ?? 0),
-            achievements: Array.isArray(profile?.achievements) ? profile.achievements : Array.isArray(data?.achievements) ? data.achievements : [],
-          });
-        }
-      } catch {
-        if (isMounted) {
-          setStudentData((prev) => ({ ...prev, name: 'Student', enrollmentNumber: '', department: '', year: '', roomNumber: '', phone: '', email: '', guardian: '' }));
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadProfile();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  };
+  const loading = overviewQuery.isLoading || overviewQuery.isFetching;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

@@ -1,26 +1,113 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Search, Filter, Plus, UserCheck, UserX, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { getStudents } from '../../services/api';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
+
+type StudentStatus = 'Present' | 'Absent' | 'On Leave' | 'Late Entry';
+
+interface StudentWithStatus {
+  id: string;
+  firstName: string;
+  lastName: string;
+  enrollmentNumber: string;
+  course: string;
+  branch: string;
+  photoUrl?: string;
+  status: StudentStatus;
+  roomNumber?: string;
+}
 
 export function WardenStudentManagement() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const students = [
-    { id: '1', name: 'Rahul Sharma', enrollment: '2021CSE045', course: 'B.Tech CSE', room: 'A-204', status: 'Present', photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400' },
-    { id: '2', name: 'Priya Singh', enrollment: '2021ECE032', course: 'B.Tech ECE', room: 'B-105', status: 'Present', photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400' },
-    { id: '3', name: 'Amit Kumar', enrollment: '2021ME018', course: 'B.Tech ME', room: 'A-301', status: 'On Leave', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400' },
-    { id: '4', name: 'Neha Patel', enrollment: '2021IT027', course: 'B.Tech IT', room: 'B-203', status: 'Present', photo: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400' },
-    { id: '5', name: 'Rohan Desai', enrollment: '2021CSE051', course: 'B.Tech CSE', room: 'A-102', status: 'Late Entry', photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400' },
-    { id: '6', name: 'Ananya Reddy', enrollment: '2021ECE041', course: 'B.Tech ECE', room: 'B-307', status: 'Absent', photo: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=400' },
-  ];
+  const studentsQuery = useQuery({
+    queryKey: ['students-list'],
+    queryFn: () => getStudents(),
+  });
 
-  const getStatusColor = (status: string) => {
+  const attendanceQuery = useQuery({
+    queryKey: ['attendance-today'],
+    queryFn: async () => {
+      const response = await apiClient.get('/v1/attendance/today');
+      return response.data?.data || [];
+    },
+  });
+
+  const roomAllocationsQuery = useQuery({
+    queryKey: ['room-allocations'],
+    queryFn: async () => {
+      const response = await apiClient.get('/v1/rooms');
+      return response.data?.data || [];
+    },
+  });
+
+  const students = useMemo<StudentWithStatus[]>(() => {
+    if (!studentsQuery.data) return [];
+
+    const attendanceMap = new Map((attendanceQuery.data || []).map((a: any) => [
+      a.studentId,
+      a.status,
+    ]));
+
+    const roomMap = new Map(
+      (roomAllocationsQuery.data || [])
+        .flatMap((room: any) => room.allocations || [])
+        .map((alloc: any) => [alloc.studentId, alloc.roomNumber])
+    );
+
+    return studentsQuery.data.map((student: any) => {
+      const attendanceStatus = attendanceMap.get(student.id);
+      let status: StudentStatus = 'Present';
+      
+      if (attendanceStatus === 'ABSENT') {
+        status = 'Absent';
+      } else if (attendanceStatus === 'ON_LEAVE') {
+        status = 'On Leave';
+      } else if (attendanceStatus === 'LATE') {
+        status = 'Late Entry';
+      }
+
+      return {
+        id: student.id,
+        firstName: student.firstName || '',
+        lastName: student.lastName || '',
+        enrollmentNumber: student.enrollmentNumber,
+        course: `${student.branch} ${student.year}`,
+        branch: student.branch,
+        photoUrl: student.photoUrl,
+        status,
+        roomNumber: roomMap.get(student.id),
+      };
+    });
+  }, [studentsQuery.data, attendanceQuery.data, roomAllocationsQuery.data]);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter(
+      (student) =>
+        student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.enrollmentNumber.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [students, searchQuery]);
+
+  const stats = useMemo(() => {
+    return {
+      total: students.length,
+      present: students.filter((s) => s.status === 'Present').length,
+      absent: students.filter((s) => s.status === 'Absent').length,
+      onLeave: students.filter((s) => s.status === 'On Leave').length,
+    };
+  }, [students]);
+
+  const getStatusColor = (status: StudentStatus) => {
     switch (status) {
       case 'Present':
         return 'bg-green-500';
@@ -35,7 +122,7 @@ export function WardenStudentManagement() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: StudentStatus) => {
     switch (status) {
       case 'Present':
         return <UserCheck size={12} />;
@@ -47,6 +134,9 @@ export function WardenStudentManagement() {
         return null;
     }
   };
+
+  const displayStudents = studentsQuery.isPending ? [] : filteredStudents;
+  const isLoading = studentsQuery.isPending || attendanceQuery.isPending;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -87,25 +177,25 @@ export function WardenStudentManagement() {
             <div className="grid grid-cols-4 gap-2 mb-6">
               <Card className="bg-white border-border">
                 <div className="p-3 text-center">
-                  <p className="text-xl mb-1">240</p>
+                  <p className="text-xl mb-1">{stats.total}</p>
                   <p className="text-xs text-muted-foreground">Total</p>
                 </div>
               </Card>
               <Card className="bg-green-50 border-green-200">
                 <div className="p-3 text-center">
-                  <p className="text-xl mb-1 text-green-600">218</p>
+                  <p className="text-xl mb-1 text-green-600">{stats.present}</p>
                   <p className="text-xs text-muted-foreground">Present</p>
                 </div>
               </Card>
               <Card className="bg-red-50 border-red-200">
                 <div className="p-3 text-center">
-                  <p className="text-xl mb-1 text-red-600">12</p>
+                  <p className="text-xl mb-1 text-red-600">{stats.absent}</p>
                   <p className="text-xs text-muted-foreground">Absent</p>
                 </div>
               </Card>
               <Card className="bg-blue-50 border-blue-200">
                 <div className="p-3 text-center">
-                  <p className="text-xl mb-1 text-blue-600">10</p>
+                  <p className="text-xl mb-1 text-blue-600">{stats.onLeave}</p>
                   <p className="text-xs text-muted-foreground">Leave</p>
                 </div>
               </Card>
@@ -119,37 +209,53 @@ export function WardenStudentManagement() {
 
             {/* Student List */}
             <div className="space-y-3">
-              {students.map((student) => (
-                <Card 
-                  key={student.id} 
-                  className="bg-card border-border cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate(`/warden/students/${student.id}`)}
-                >
-                  <div className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <Avatar className="w-12 h-12 border-2 border-secondary">
-                        <AvatarImage src={student.photo} />
-                        <AvatarFallback>{student.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-1">
-                          <h4 className="text-sm">{student.name}</h4>
-                          <Badge className={`${getStatusColor(student.status)} text-white text-xs flex items-center space-x-1`}>
-                            {getStatusIcon(student.status)}
-                            <span>{student.status}</span>
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-1">{student.enrollment}</p>
-                        <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                          <span>{student.course}</span>
-                          <span>•</span>
-                          <span>Room {student.room}</span>
+              {isLoading ? (
+                <Card className="bg-card border-border">
+                  <div className="p-4 text-center text-muted-foreground">
+                    Loading students...
+                  </div>
+                </Card>
+              ) : displayStudents.length === 0 ? (
+                <Card className="bg-card border-border">
+                  <div className="p-4 text-center text-muted-foreground">
+                    No students found
+                  </div>
+                </Card>
+              ) : (
+                displayStudents.map((student) => (
+                  <Card 
+                    key={student.id} 
+                    className="bg-card border-border cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate(`/warden/students/${student.id}`)}
+                  >
+                    <div className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="w-12 h-12 border-2 border-secondary">
+                          <AvatarImage src={student.photoUrl} />
+                          <AvatarFallback>
+                            {student.firstName[0]}{student.lastName[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="text-sm">{student.firstName} {student.lastName}</h4>
+                            <Badge className={`${getStatusColor(student.status)} text-white text-xs flex items-center space-x-1`}>
+                              {getStatusIcon(student.status)}
+                              <span>{student.status}</span>
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-1">{student.enrollmentNumber}</p>
+                          <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                            <span>{student.course}</span>
+                            <span>•</span>
+                            <span>{student.roomNumber ? `Room ${student.roomNumber}` : 'No Room'}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -157,3 +263,4 @@ export function WardenStudentManagement() {
     </div>
   );
 }
+

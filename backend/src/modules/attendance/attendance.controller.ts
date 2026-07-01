@@ -6,7 +6,7 @@ import {
   createAttendanceRecord,
   listStudentAttendance,
   listTodayAttendance,
-  getAttendanceSummary,
+  getAttendanceSummary as getAttendanceSummaryReport,
   modifyAttendance,
 } from './attendance.service';
 
@@ -31,7 +31,7 @@ export const getTodayAttendance = asyncHandler(async (req: Request, res: Respons
 
 export const getAttendanceSummary = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query as AttendanceSummaryQuery;
-  const summary = await getAttendanceSummary(query);
+  const summary = await getAttendanceSummaryReport(query);
   return res.status(200).json({ success: true, message: 'Attendance summary retrieved', data: summary });
 });
 

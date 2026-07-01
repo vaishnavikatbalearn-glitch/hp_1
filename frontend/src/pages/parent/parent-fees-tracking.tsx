@@ -1,31 +1,112 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, DollarSign, Download, CheckCircle2, Clock, CreditCard } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { api, getFeeDetails, getPaymentHistory, getPendingFees, type FeeRecord } from '../../services/api';
+
+interface FeeSummaryState {
+  totalFees: number;
+  paidAmount: number;
+  pendingAmount: number;
+  nextDueDate: string;
+}
+
+interface PaymentHistoryState {
+  id: string;
+  date: string;
+  amount: number;
+  description: string;
+  status: string;
+  receipt: string;
+}
+
+interface UpcomingDueState {
+  description: string;
+  amount: number;
+  dueDate: string;
+}
 
 export function ParentFeesTracking() {
   const navigate = useNavigate();
+  const [feesData, setFeesData] = useState<FeeSummaryState>({
+    totalFees: 0,
+    paidAmount: 0,
+    pendingAmount: 0,
+    nextDueDate: '—',
+  });
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryState[]>([]);
+  const [upcomingDues, setUpcomingDues] = useState<UpcomingDueState[]>([]);
 
-  const feesData = {
-    totalFees: 85000,
-    paidAmount: 72500,
-    pendingAmount: 12500,
-    nextDueDate: "Jul 15, 2026",
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  const paymentHistory = [
-    { id: 1, date: "May 10, 2026", amount: 25000, description: "Semester 2 Fees", status: "Paid", receipt: "RCP-2026-001" },
-    { id: 2, date: "Apr 15, 2026", amount: 22500, description: "Semester 1 Fees (Remaining)", status: "Paid", receipt: "RCP-2026-002" },
-    { id: 3, date: "Mar 5, 2026", amount: 25000, description: "Semester 1 Fees (Installment)", status: "Paid", receipt: "RCP-2026-003" },
-  ];
+    const loadFees = async () => {
+      try {
+        const profile = await api.get<any>('v1/auth/me');
+        const studentId = profile?.studentProfile?.id ?? profile?.studentId ?? profile?.id;
 
-  const upcomingDues = [
-    { description: "Semester 3 Fees", amount: 12500, dueDate: "Jul 15, 2026" },
-  ];
+        if (!studentId) {
+          throw new Error('Student id unavailable');
+        }
 
-  const paidPercentage = (feesData.paidAmount / feesData.totalFees) * 100;
+        const [feeRecords, paymentRecords, pendingRecords] = await Promise.all([
+          getFeeDetails(studentId),
+          getPaymentHistory(studentId),
+          getPendingFees(),
+        ]);
+
+        const totalFees = feeRecords.reduce((sum: number, fee: FeeRecord) => sum + Number(fee.amount ?? 0), 0);
+        const paidAmount = feeRecords.reduce((sum: number, fee: FeeRecord) => sum + Number(fee.paidAmount ?? 0), 0);
+        const pendingAmount = Math.max(totalFees - paidAmount, 0);
+        const nextDueDate = feeRecords
+          .filter((fee: FeeRecord) => Number(fee.paidAmount ?? 0) < Number(fee.amount ?? 0))
+          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]?.dueDate;
+
+        const mappedPayments = (paymentRecords || []).map((record: any) => ({
+          id: record.id,
+          date: new Date(record?.paidAt || record?.createdAt || record?.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+          amount: Number(record?.amount ?? 0),
+          description: record?.description || record?.type || 'Fee payment',
+          status: 'Paid',
+          receipt: record?.receiptNumber || '—',
+        }));
+
+        const mappedDues = (pendingRecords || []).map((record: any) => ({
+          description: record?.description || 'Pending fee',
+          amount: Number(record?.amount ?? 0) - Number(record?.paidAmount ?? 0),
+          dueDate: new Date(record?.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        }));
+
+        if (isMounted) {
+          setFeesData({
+            totalFees,
+            paidAmount,
+            pendingAmount,
+            nextDueDate: nextDueDate ? new Date(nextDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+          });
+          setPaymentHistory(mappedPayments);
+          setUpcomingDues(mappedDues);
+        }
+      } catch {
+        if (isMounted) {
+          setFeesData({ totalFees: 0, paidAmount: 0, pendingAmount: 0, nextDueDate: '—' });
+          setPaymentHistory([]);
+          setUpcomingDues([]);
+        }
+      }
+    };
+
+    void loadFees();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const paidPercentage = feesData.totalFees > 0 ? (feesData.paidAmount / feesData.totalFees) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -93,7 +174,9 @@ export function ParentFeesTracking() {
           {/* Upcoming Dues */}
           <div className="px-6 mb-6">
             <h3 className="text-base mb-4">Upcoming Dues</h3>
-            {upcomingDues.map((due, index) => (
+            {upcomingDues.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground bg-card border border-border rounded-lg">No upcoming dues found.</div>
+            ) : upcomingDues.map((due, index) => (
               <Card key={index} className="bg-amber-50 border-amber-200">
                 <div className="p-5">
                   <div className="flex items-start space-x-3 mb-4">
@@ -121,7 +204,9 @@ export function ParentFeesTracking() {
           <div className="px-6 mb-6">
             <h3 className="text-base mb-4">Payment History</h3>
             <div className="space-y-3">
-              {paymentHistory.map((payment) => (
+              {paymentHistory.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground bg-card border border-border rounded-lg">No payment history found.</div>
+              ) : paymentHistory.map((payment) => (
                 <Card key={payment.id} className="bg-card border-border">
                   <div className="p-4">
                     <div className="flex items-start justify-between mb-3">

@@ -25,14 +25,14 @@ export const pendingVisitors = asyncHandler(async (_req: Request, res: Response)
 
 export const approveVisitor = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  const id = req.params.id;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const result = await approveVisitorRequest(id, authReq.user.userId);
   return ApiResponse.ok(res, result, 'Visitor approved');
 });
 
 export const rejectVisitor = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  const id = req.params.id;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const body = req.body as RejectVisitorBody;
   const result = await rejectVisitorRequest(id, authReq.user.userId, body);
   return ApiResponse.ok(res, result, 'Visitor rejected');

@@ -4,6 +4,9 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+// TODO: Replace with live API when /v1/fines endpoint is available
+// Ready for integration with getFines() and createFine() from services/api
+
 export function WardenFineManagement() {
   const navigate = useNavigate();
   const fines = [

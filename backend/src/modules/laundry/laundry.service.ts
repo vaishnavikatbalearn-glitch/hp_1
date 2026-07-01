@@ -1,20 +1,8 @@
+import { getStudentIdByUserId } from '../../utils/student';
 import { prisma } from '../../config/database';
 import { AppError } from '../../types/errors';
 import { Role } from '../../types';
 import type { CreateLaundryBody, UpdateLaundryStatusBody } from './laundry.validation';
-
-async function getStudentIdByUserId(userId: string) {
-  const student = await prisma.student.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-
-  if (!student) {
-    throw AppError.notFound('Student profile');
-  }
-
-  return student.id;
-}
 
 export async function createLaundryRequest(userId: string, data: CreateLaundryBody) {
   const studentId = await getStudentIdByUserId(userId);
@@ -58,7 +46,7 @@ export async function getLaundryRequests(userId: string, role: Role) {
 export async function updateLaundryRequestStatus(
   laundryId: string,
   updaterId: string,
-  role: Role,
+  _role: Role,
   data: UpdateLaundryStatusBody,
 ) {
   const laundry = await prisma.laundryRequest.findUnique({ where: { id: laundryId } });

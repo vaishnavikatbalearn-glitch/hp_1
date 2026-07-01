@@ -1,58 +1,73 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, LogOut, LogIn, Search, Filter, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { api } from '../../services/api';
+
+interface MovementRecordState {
+  date: string;
+  exitTime: string;
+  entryTime: string;
+  duration: string;
+  status: string;
+}
 
 export function ParentMovementHistory() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [movementHistory, setMovementHistory] = useState<MovementRecordState[]>([]);
 
-  const movementHistory = [
-    {
-      date: "Jun 20, 2026",
-      exitTime: "8:30 AM",
-      entryTime: "6:45 PM",
-      duration: "10h 15m",
-      status: "Completed",
-    },
-    {
-      date: "Jun 19, 2026",
-      exitTime: "9:00 AM",
-      entryTime: "7:30 PM",
-      duration: "10h 30m",
-      status: "Completed",
-    },
-    {
-      date: "Jun 18, 2026",
-      exitTime: "8:45 AM",
-      entryTime: "6:15 PM",
-      duration: "9h 30m",
-      status: "Completed",
-    },
-    {
-      date: "Jun 17, 2026",
-      exitTime: "3:00 PM",
-      entryTime: "9:45 PM",
-      duration: "6h 45m",
-      status: "Completed",
-    },
-    {
-      date: "Jun 16, 2026",
-      exitTime: "10:00 AM",
-      entryTime: "5:30 PM",
-      duration: "7h 30m",
-      status: "Completed",
-    },
-    {
-      date: "Jun 15, 2026",
-      exitTime: "8:30 AM",
-      entryTime: "11:00 PM",
-      duration: "14h 30m",
-      status: "Late Entry",
-    },
-  ];
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadMovementHistory = async () => {
+      try {
+        const profile = await api.get<any>('v1/auth/me');
+        const studentId = profile?.studentProfile?.id ?? profile?.studentId ?? profile?.id;
+        const records = studentId ? await api.get<any[]>(`v1/attendance/student/${studentId}`) : [];
+        const attendanceRecords = Array.isArray(records) ? records : [];
+        const mapped = attendanceRecords.map((record: any) => {
+          const statusRaw = String(record?.status || 'PRESENT');
+          const normalized = statusRaw.toLowerCase();
+
+          const toTime = (v: unknown) => {
+            if (!v) return '—';
+            const d = new Date(v as any);
+            if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            return String(v);
+          };
+
+          return {
+            date: record?.date
+              ? new Date(record?.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              : '—',
+            exitTime: toTime(record?.exitTime ?? record?.exit ?? record?.outTime),
+            entryTime: toTime(record?.entryTime ?? record?.entry ?? record?.inTime),
+            duration: record?.duration ? String(record.duration) : '—',
+            status: normalized === 'present' ? 'Completed' : normalized === 'absent' ? 'Absent' : 'Leave',
+          };
+        });
+
+        if (isMounted) {
+          setMovementHistory(mapped);
+        }
+      } catch {
+        if (isMounted) {
+          setMovementHistory([]);
+        }
+      }
+    };
+
+    void loadMovementHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredHistory = useMemo(() => movementHistory.filter((record) => record.date.toLowerCase().includes(searchQuery.toLowerCase())), [movementHistory, searchQuery]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -88,22 +103,22 @@ export function ParentMovementHistory() {
             <div className="grid grid-cols-3 gap-3 mb-6">
               <Card className="bg-blue-50 border-blue-200">
                 <div className="p-4 text-center">
-                  <p className="text-2xl mb-1">28</p>
+                  <p className="text-2xl mb-1">{movementHistory.length}</p>
                   <p className="text-xs text-muted-foreground">Total Days</p>
                 </div>
               </Card>
 
               <Card className="bg-green-50 border-green-200">
                 <div className="p-4 text-center">
-                  <p className="text-2xl mb-1">26</p>
+                  <p className="text-2xl mb-1">{movementHistory.filter((record) => record.status === 'Completed').length}</p>
                   <p className="text-xs text-muted-foreground">Regular</p>
                 </div>
               </Card>
 
               <Card className="bg-amber-50 border-amber-200">
                 <div className="p-4 text-center">
-                  <p className="text-2xl mb-1">1</p>
-                  <p className="text-xs text-muted-foreground">Late Entry</p>
+                  <p className="text-2xl mb-1">{movementHistory.filter((record) => record.status === 'Leave').length}</p>
+                  <p className="text-xs text-muted-foreground">Leave</p>
                 </div>
               </Card>
             </div>
@@ -117,7 +132,9 @@ export function ParentMovementHistory() {
             </div>
 
             <div className="space-y-3">
-              {movementHistory.map((record, index) => (
+              {filteredHistory.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground">No movement records found.</div>
+              ) : filteredHistory.map((record, index) => (
                 <Card key={index} className="bg-card border-border">
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-3">

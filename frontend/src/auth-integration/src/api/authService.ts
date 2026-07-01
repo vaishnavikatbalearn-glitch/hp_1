@@ -14,27 +14,27 @@ export const authService = {
   },
 
   markAttendance: async (payload: unknown): Promise<unknown> => {
-    const { data } = await apiClient.post('/attendance/mark', payload);
+    const { data } = await apiClient.post('/v1/attendance/mark', payload);
     return data;
   },
 
   getStudentAttendance: async (studentId: string): Promise<unknown> => {
-    const { data } = await apiClient.get(`/attendance/student/${studentId}`);
+    const { data } = await apiClient.get(`/v1/attendance/student/${studentId}`);
     return data;
   },
 
   getTodayAttendance: async (): Promise<unknown> => {
-    const { data } = await apiClient.get('/attendance/today');
+    const { data } = await apiClient.get('/v1/attendance/today');
     return data;
   },
 
   getAttendanceSummary: async (params?: Record<string, string | number | undefined>): Promise<unknown> => {
-    const { data } = await apiClient.get('/attendance/summary', { params });
+    const { data } = await apiClient.get('/v1/attendance/summary', { params });
     return data;
   },
 
   updateAttendance: async (id: string, payload: unknown): Promise<unknown> => {
-    const { data } = await apiClient.patch(`/attendance/${id}`, payload);
+    const { data } = await apiClient.patch(`/v1/attendance/${id}`, payload);
     return data;
   },
 

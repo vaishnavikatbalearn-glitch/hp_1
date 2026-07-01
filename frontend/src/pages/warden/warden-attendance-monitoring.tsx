@@ -1,15 +1,45 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Download, UserCheck, UserX, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { apiClient } from '../../auth-integration/src/api/axiosInstance';
 
 export function WardenAttendanceMonitoring() {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({ present: 0, absent: 0, late: 0, total: 0 });
 
-  const stats = { present: 218, absent: 12, late: 5, total: 240 };
-  const presentRate = Math.round((stats.present / stats.total) * 100);
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAttendanceSummary = async () => {
+      try {
+        const { data } = await apiClient.get('/v1/attendance/summary');
+        const payload = data?.data ?? data ?? {};
+        const summary = payload?.monthly ?? payload?.hostel ?? {};
+        const present = Number(summary?.present ?? 0);
+        const absent = Number(summary?.absent ?? 0);
+        const late = Number(summary?.late ?? 0);
+        const total = Number(summary?.total ?? present + absent + late);
+
+        if (isMounted) {
+          setStats({ present, absent, late, total });
+        }
+      } catch {
+        if (isMounted) {
+          setStats({ present: 0, absent: 0, late: 0, total: 0 });
+        }
+      }
+    };
+
+    loadAttendanceSummary();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const presentRate = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -22,7 +52,23 @@ export function WardenAttendanceMonitoring() {
               </button>
               <h1 className="text-white text-lg">Attendance Monitoring</h1>
             </div>
-            <Button size="sm" className="bg-white/20 hover:bg-white/30 text-white border-white/30">
+            <Button size="sm" className="bg-white/20 hover:bg-white/30 text-white border-white/30" onClick={async () => {
+              try {
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+                const { data } = await apiClient.get('/v1/attendance/summary', { params: { month, year } });
+                const payload = data?.data ?? data ?? {};
+                const daily = Array.isArray(payload?.daily) ? payload.daily : [];
+                const summary = payload?.monthly ?? payload?.hostel ?? {};
+                const { attendanceSummaryToCsv } = await import('./attendance.utils');
+                const csv = attendanceSummaryToCsv(daily, summary);
+                const { downloadCSV } = await import('../../utils/download');
+                downloadCSV(`attendance-summary-${year}-${String(month).padStart(2,'0')}.csv`, csv);
+              } catch (e) {
+                // noop
+              }
+            }}>
               <Download size={16} className="mr-1" />
               Export
             </Button>
