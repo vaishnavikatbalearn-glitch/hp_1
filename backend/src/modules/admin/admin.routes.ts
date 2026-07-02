@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/authenticate.middleware';
 import { requireSuperAdmin } from '../../middleware/rbac.middleware';
 import { validate, schemas } from '../../middleware/validate.middleware';
 import {
+  activateAccount,
   createStaff,
   getStaff,
   listStaff,
@@ -10,6 +11,7 @@ import {
   updateStaff,
 } from './admin.controller';
 import {
+  activateStaffSchema,
   createStaffSchema,
   updateStaffSchema,
   updateStaffStatusSchema,
@@ -17,7 +19,8 @@ import {
 
 const router = Router();
 
-router.post('/staff', authenticate, requireSuperAdmin, validate(createStaffSchema, 'body'), createStaff);
+router.post('/create-staff', authenticate, requireSuperAdmin, validate(createStaffSchema, 'body'), createStaff);
+router.post('/activate-account', validate(activateStaffSchema, 'body'), activateAccount);
 router.get('/staff', authenticate, requireSuperAdmin, listStaff);
 router.get('/staff/:id', authenticate, requireSuperAdmin, validate(schemas.idParam, 'params'), getStaff);
 router.put('/staff/:id', authenticate, requireSuperAdmin, validate(schemas.idParam, 'params'), validate(updateStaffSchema, 'body'), updateStaff);

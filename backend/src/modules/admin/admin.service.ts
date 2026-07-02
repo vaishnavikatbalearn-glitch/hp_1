@@ -1,10 +1,9 @@
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
-import { env } from '../../config/env';
 import { AppError, ErrorCode } from '../../types/errors';
 import type { Role } from '../../types';
-import type { CreateStaffBody, UpdateStaffBody, UpdateStaffStatusBody } from './admin.validation';
+import { activateStaffAccount } from '../auth/auth.service';
+import type { ActivateStaffBody, CreateStaffBody, UpdateStaffBody, UpdateStaffStatusBody } from './admin.validation';
 
 const STAFF_SELECT = {
   id: true,
@@ -32,14 +31,6 @@ const STAFF_SELECT = {
 
 function makeActivationToken(): string {
   return crypto.randomBytes(24).toString('hex');
-}
-
-function makeOtp(): string {
-  return crypto.randomInt(100000, 999999).toString();
-}
-
-async function hashOtp(otp: string): Promise<string> {
-  return bcrypt.hash(otp, env.BCRYPT_ROUNDS);
 }
 
 function mapStaffPayload(user: any) {
@@ -80,9 +71,7 @@ export async function createStaffAccount(actorId: string, payload: CreateStaffBo
   }
 
   const activationToken = makeActivationToken();
-  const activationOtp = makeOtp();
-  const otpHash = await hashOtp(activationOtp);
-  const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
+  const activationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   const user = await prisma.user.create({
     data: {
@@ -95,8 +84,7 @@ export async function createStaffAccount(actorId: string, payload: CreateStaffBo
       isVerified: false,
       accountStatus: 'PENDING_ACTIVATION' as any,
       activationToken,
-      activationOtpHash: otpHash,
-      otpExpiry,
+      otpExpiry: activationExpiry,
       createdById: actorId,
     },
     select: STAFF_SELECT,
@@ -120,8 +108,13 @@ export async function createStaffAccount(actorId: string, payload: CreateStaffBo
 
   return {
     staff: mapStaffPayload(user),
-    activationOtp,
+    activationToken,
+    activationExpiresAt: activationExpiry.toISOString(),
   };
+}
+
+export async function activateStaffAccountByToken(payload: ActivateStaffBody) {
+  return activateStaffAccount(payload.token, payload.password);
 }
 
 export async function listStaffAccounts() {

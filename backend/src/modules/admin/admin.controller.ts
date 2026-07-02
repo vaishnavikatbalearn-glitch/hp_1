@@ -3,6 +3,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiResponse } from '../../utils/response';
 import type { AuthenticatedRequest } from '../../types';
 import {
+  activateStaffAccountByToken,
   createStaffAccount,
   getStaffAccountById,
   listStaffAccounts,
@@ -14,6 +15,11 @@ export const createStaff = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const result = await createStaffAccount(authReq.user.userId, req.body);
   return ApiResponse.created(res, result, 'Staff account created successfully');
+});
+
+export const activateAccount = asyncHandler(async (req: Request, res: Response) => {
+  const result = await activateStaffAccountByToken(req.body);
+  return ApiResponse.ok(res, result, 'Account activated successfully');
 });
 
 export const listStaff = asyncHandler(async (_req: Request, res: Response) => {

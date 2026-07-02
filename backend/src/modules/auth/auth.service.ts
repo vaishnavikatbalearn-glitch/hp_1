@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database';
@@ -52,6 +53,102 @@ async function buildSession(user: any): Promise<AuthSessionPayload> {
   };
 }
 
+function generateOtp(): string {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+export async function requestOtp(email: string): Promise<{ message: string }> {
+  const normalizedEmail = email.toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true, isActive: true },
+  });
+
+  if (!user) {
+    return { message: 'If an account exists, an OTP has been sent.' };
+  }
+
+  if (!user.isActive) {
+    throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
+  }
+
+  const otp = generateOtp();
+  const otpHash = await bcrypt.hash(otp, env.BCRYPT_ROUNDS);
+  const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      otpHash,
+      otpExpiry,
+      otpAttempts: 0,
+    },
+  });
+
+  return { message: 'OTP sent successfully' };
+}
+
+export async function resendOtp(email: string): Promise<{ message: string }> {
+  return requestOtp(email);
+}
+
+export async function verifyOtp(email: string, otp: string): Promise<AuthSessionPayload> {
+  const normalizedEmail = email.toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      role: true,
+      isActive: true,
+      otpHash: true,
+      otpAttempts: true,
+      otpExpiry: true,
+    },
+  });
+
+  if (!user) {
+    throw AppError.unauthorized('Invalid OTP request', ErrorCode.INVALID_CREDENTIALS);
+  }
+
+  if (!user.isActive) {
+    throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
+  }
+
+  if (!user.otpHash || !user.otpExpiry || user.otpExpiry <= new Date()) {
+    throw AppError.badRequest('OTP expired. Please request a new one.');
+  }
+
+  if (user.otpAttempts >= 5) {
+    throw AppError.badRequest('Too many OTP attempts. Please request a new OTP.');
+  }
+
+  const isValidOtp = await bcrypt.compare(otp, user.otpHash);
+  if (!isValidOtp) {
+    const nextAttempts = Math.min((user.otpAttempts ?? 0) + 1, 5);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { otpAttempts: nextAttempts },
+    });
+
+    throw AppError.badRequest(nextAttempts >= 5 ? 'Too many OTP attempts. Please request a new OTP.' : 'Invalid OTP');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      lastLoginAt: new Date(),
+      otpHash: null,
+      otpExpiry: null,
+      otpAttempts: 0,
+    },
+    select: AUTH_USER_SELECT,
+  });
+
+  return buildSession(updated);
+}
+
 export async function registerUser(payload: { name: string; email: string; password: string }): Promise<AuthSessionPayload> {
   const existing = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } });
   if (existing) {
@@ -72,7 +169,15 @@ export async function registerUser(payload: { name: string; email: string; passw
   return buildSession(user);
 }
 
-export async function loginUser(payload: { email: string; password: string }): Promise<AuthSessionPayload> {
+export async function loginUser(payload: { email: string; password?: string; otp?: string }): Promise<AuthSessionPayload> {
+  if (payload.otp) {
+    return verifyOtp(payload.email.toLowerCase(), payload.otp);
+  }
+
+  if (!payload.password) {
+    throw AppError.badRequest('Either password or OTP is required');
+  }
+
   const user = await prisma.user.findUnique({
     where: { email: payload.email.toLowerCase() },
     select: { ...AUTH_USER_SELECT, passwordHash: true },
@@ -116,6 +221,40 @@ export async function refreshSession(refreshToken: string): Promise<AuthSessionP
 export async function revokeRefreshToken(refreshToken: string): Promise<void> {
   const payload = verifyRefreshToken(refreshToken);
   await prisma.refreshToken.updateMany({ where: { jti: payload.jti, revokedAt: null }, data: { revokedAt: new Date() } });
+}
+
+export async function activateStaffAccount(token: string, password: string): Promise<{ id: string; email: string }> {
+  const user = await prisma.user.findFirst({
+    where: {
+      activationToken: token,
+      accountStatus: 'PENDING_ACTIVATION',
+    },
+  });
+
+  if (!user) {
+    throw AppError.badRequest('Invalid or expired activation token');
+  }
+
+  if (user.otpExpiry && user.otpExpiry <= new Date()) {
+    throw AppError.badRequest('Activation token expired');
+  }
+
+  const passwordHash = await bcrypt.hash(password, env.BCRYPT_ROUNDS);
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      isActive: true,
+      accountStatus: 'ACTIVE',
+      activationToken: null,
+      otpExpiry: null,
+      isVerified: true,
+    },
+    select: { id: true, email: true },
+  });
+
+  return { id: updated.id, email: updated.email };
 }
 
 export async function getAuthUserById(userId: string): Promise<AuthUser | null> {
