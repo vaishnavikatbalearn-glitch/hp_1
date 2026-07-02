@@ -156,33 +156,49 @@ enum VisitorStatus {
   REJECTED
 }
 
+enum StaffAccountStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  SUSPENDED
+}
+
 // ─── Core Models ─────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  phone         String?   @unique
-  passwordHash  String
-  role          Role
-  isActive      Boolean   @default(true)
-  isVerified    Boolean   @default(false)
-  lastLoginAt   DateTime?
-  refreshTokens RefreshToken[]
+  id                  String             @id @default(uuid())
+  email               String             @unique
+  phone               String?            @unique
+  passwordHash        String
+  role                Role
+  fullName            String?
+  isActive            Boolean            @default(true)
+  isVerified          Boolean            @default(false)
+  accountStatus       StaffAccountStatus @default(ACTIVE)
+  activationToken     String?            @unique
+  activationOtpHash   String?
+  otpExpiry           DateTime?
+  createdById         String?
+  createdBy           User?              @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdStaffAccounts User[]             @relation("CreatedByUser")
+  lastLoginAt         DateTime?
+  refreshTokens       RefreshToken[]
 
   // Profile linkage (role-based)
-  studentProfile  Student?
-  parentProfile   Parent?
-  staffProfile    Staff?
-  notifications   Notification[]
+  studentProfile      Student?
+  parentProfile       Parent?
+  staffProfile        Staff?
+  notifications       Notification[]
 
   // Audit
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deletedAt           DateTime?
 
   @@index([email])
   @@index([role])
   @@index([isActive])
+  @@index([accountStatus])
+  @@index([createdById])
   @@map("users")
 }
 

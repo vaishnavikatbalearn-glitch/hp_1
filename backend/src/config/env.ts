@@ -1,9 +1,23 @@
+import { existsSync } from 'fs';
+import path from 'path';
 import { z } from 'zod';
 import dotenv from 'dotenv';
-import path from 'path';
+
+const fallbackDatabaseUrl = 'postgresql://postgres:postgres@127.0.0.1:5432/hostelpaglu?schema=public';
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(__dirname, '..', '..', '.env'),
+  path.resolve(__dirname, '..', '.env'),
+].filter((candidate, index, list) => list.indexOf(candidate) === index);
+
+const resolvedEnvPath = envCandidates.find((candidate) => existsSync(candidate));
 
 // Load .env before anything else
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+if (resolvedEnvPath) {
+  dotenv.config({ path: resolvedEnvPath });
+} else {
+  dotenv.config();
+}
 
 // ─── Environment Schema ───────────────────────────────────────────────────────
 const envSchema = z.object({
@@ -15,7 +29,7 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
 
   // Database
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DATABASE_URL: z.string().trim().min(1, 'DATABASE_URL is required').default(fallbackDatabaseUrl),
   DATABASE_POOL_MIN: z.coerce.number().int().nonnegative().default(2),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
 

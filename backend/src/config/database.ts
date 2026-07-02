@@ -34,6 +34,11 @@ function createPrismaClient(): PrismaClient {
         ]
       : [{ emit: 'event', level: 'error' }],
     errorFormat: env.isDevelopment ? 'pretty' : 'minimal',
+    datasources: {
+      db: {
+        url: env.DATABASE_URL,
+      },
+    },
   });
 
   // Attach dev global for HMR / ts-node-dev scenarios

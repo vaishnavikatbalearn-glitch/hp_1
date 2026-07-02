@@ -14,6 +14,7 @@ import feesRouter from '../modules/fees/fees.routes';
 import notificationRouter from '../modules/notification/notification.routes';
 import studentRouter from '../modules/student/student.routes';
 import roomsRouter from '../modules/rooms/rooms.routes';
+import adminRouter from '../modules/admin/admin.routes';
 // import userRouter from '../modules/user/user.routes';
 // etc.
 
@@ -43,6 +44,7 @@ v1Router.use('/fees', feesRouter);
 v1Router.use('/notifications', notificationRouter);
 v1Router.use('/student', studentRouter);
 v1Router.use('/rooms', roomsRouter);
+v1Router.use('/admin', adminRouter);
 // v1Router.use('/users', userRouter);
 // v1Router.use('/hostels', hostelRouter);
 // v1Router.use('/fees', feesRouter);
