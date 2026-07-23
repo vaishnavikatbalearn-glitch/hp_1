@@ -25,7 +25,12 @@ export const updateStaffStatusSchema = z.object({
   status: z.enum(['PENDING_ACTIVATION', 'ACTIVE', 'SUSPENDED']),
 });
 
+export const resetStaffPasswordSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
 export type CreateStaffBody = z.infer<typeof createStaffSchema>;
 export type ActivateStaffBody = z.infer<typeof activateStaffSchema>;
 export type UpdateStaffBody = z.infer<typeof updateStaffSchema>;
 export type UpdateStaffStatusBody = z.infer<typeof updateStaffStatusSchema>;
+export type ResetStaffPasswordBody = z.infer<typeof resetStaffPasswordSchema>;

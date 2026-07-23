@@ -5,8 +5,12 @@ import type { AuthenticatedRequest } from '../../types';
 import {
   activateStaffAccountByToken,
   createStaffAccount,
+  disableStaffAccount,
+  enableStaffAccount,
   getStaffAccountById,
   listStaffAccounts,
+  resetStaffPassword,
+  sendStaffOtp,
   updateStaffAccount,
   updateStaffStatus,
 } from './admin.service';
@@ -43,4 +47,28 @@ export const patchStaffStatus = asyncHandler(async (req: Request, res: Response)
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const staff = await updateStaffStatus(id, req.body);
   return ApiResponse.ok(res, staff, 'Staff account status updated successfully');
+});
+
+export const disableStaff = asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const staff = await disableStaffAccount(id);
+  return ApiResponse.ok(res, staff, 'Staff account disabled successfully');
+});
+
+export const enableStaff = asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const staff = await enableStaffAccount(id);
+  return ApiResponse.ok(res, staff, 'Staff account enabled successfully');
+});
+
+export const sendStaffOtpHandler = asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const result = await sendStaffOtp(id);
+  return ApiResponse.ok(res, result, 'OTP sent successfully');
+});
+
+export const resetStaffPasswordHandler = asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const result = await resetStaffPassword(id, req.body);
+  return ApiResponse.ok(res, result, 'Password reset successfully');
 });

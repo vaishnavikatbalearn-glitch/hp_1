@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database';
@@ -7,8 +6,10 @@ import { AppError, ErrorCode } from '../../types/errors';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
 import type { AuthUser, AuthSessionPayload } from './auth.types';
 import type { Role } from '../../types';
+import { generateOtp6Digits, storeOtpForUser } from './otp/otp.service';
 
 const AUTH_USER_SELECT = {
+
   id: true,
   fullName: true,
   email: true,
@@ -53,11 +54,8 @@ async function buildSession(user: any): Promise<AuthSessionPayload> {
   };
 }
 
-function generateOtp(): string {
-  return crypto.randomInt(100000, 1000000).toString();
-}
-
 export async function requestOtp(email: string): Promise<{ message: string }> {
+
   const normalizedEmail = email.toLowerCase();
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
@@ -72,28 +70,71 @@ export async function requestOtp(email: string): Promise<{ message: string }> {
     throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
   }
 
-  const otp = generateOtp();
-  const otpHash = await bcrypt.hash(otp, env.BCRYPT_ROUNDS);
-  const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      otpHash,
-      otpExpiry,
-      otpAttempts: 0,
-    },
-  });
+  const otp = generateOtp6Digits();
+  await storeOtpForUser(user.id, otp, 10);
 
   return { message: 'OTP sent successfully' };
+
 }
 
 export async function resendOtp(email: string): Promise<{ message: string }> {
   return requestOtp(email);
 }
 
+export async function sendOtpToUser(userId: string): Promise<{ message: string }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, isActive: true },
+  });
+
+  if (!user) {
+    throw AppError.notFound('User');
+  }
+
+  if (!user.isActive) {
+    throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
+  }
+
+  const otp = generateOtp6Digits();
+  await storeOtpForUser(user.id, otp, 10);
+
+  return { message: 'OTP sent successfully' };
+}
+
+export async function resetUserPassword(userId: string, password: string): Promise<{ id: string; email: string }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true },
+  });
+
+  if (!user) {
+    throw AppError.notFound('User');
+  }
+
+  const passwordHash = await bcrypt.hash(password, env.BCRYPT_ROUNDS);
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      isVerified: true,
+      accountStatus: 'ACTIVE' as any,
+      isActive: true,
+      lastLoginAt: new Date(),
+      activationToken: null,
+      otpHash: null,
+      otpExpiry: null,
+      otpAttempts: 0,
+    },
+    select: { id: true, email: true },
+  });
+
+  return { id: updated.id, email: updated.email };
+}
+
 export async function verifyOtp(email: string, otp: string): Promise<AuthSessionPayload> {
   const normalizedEmail = email.toLowerCase();
+
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
     select: {
@@ -138,7 +179,7 @@ export async function verifyOtp(email: string, otp: string): Promise<AuthSession
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: {
-      lastLoginAt: new Date(),
+      // invalidate OTP after successful use
       otpHash: null,
       otpExpiry: null,
       otpAttempts: 0,
@@ -146,8 +187,14 @@ export async function verifyOtp(email: string, otp: string): Promise<AuthSession
     select: AUTH_USER_SELECT,
   });
 
-  return buildSession(updated);
+  return buildSession({
+    ...updated,
+    lastLoginAt: new Date(),
+  });
 }
+
+
+
 
 export async function registerUser(payload: { name: string; email: string; password: string }): Promise<AuthSessionPayload> {
   const existing = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } });
@@ -235,6 +282,7 @@ export async function activateStaffAccount(token: string, password: string): Pro
     throw AppError.badRequest('Invalid or expired activation token');
   }
 
+  // Reuse existing otpExpiry as the activation token expiry
   if (user.otpExpiry && user.otpExpiry <= new Date()) {
     throw AppError.badRequest('Activation token expired');
   }
@@ -245,17 +293,27 @@ export async function activateStaffAccount(token: string, password: string): Pro
     where: { id: user.id },
     data: {
       passwordHash,
-      isActive: true,
-      accountStatus: 'ACTIVE',
-      activationToken: null,
-      otpExpiry: null,
+      // Activation state (per your requirement)
       isVerified: true,
+      accountStatus: 'ACTIVE',
+
+      // Mark first login completed (project uses lastLoginAt as login marker)
+      lastLoginAt: new Date(),
+
+      // Invalidate activation token + any OTP state used during activation
+      activationToken: null,
+      otpHash: null,
+      otpExpiry: null,
+      otpAttempts: 0,
+
+      isActive: true,
     },
     select: { id: true, email: true },
   });
 
   return { id: updated.id, email: updated.email };
 }
+
 
 export async function getAuthUserById(userId: string): Promise<AuthUser | null> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: AUTH_USER_SELECT });

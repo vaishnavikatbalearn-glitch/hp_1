@@ -2,8 +2,8 @@ import crypto from 'crypto';
 import { prisma } from '../../config/database';
 import { AppError, ErrorCode } from '../../types/errors';
 import type { Role } from '../../types';
-import { activateStaffAccount } from '../auth/auth.service';
-import type { ActivateStaffBody, CreateStaffBody, UpdateStaffBody, UpdateStaffStatusBody } from './admin.validation';
+import { activateStaffAccount, resetUserPassword, sendOtpToUser } from '../auth/auth.service';
+import type { ActivateStaffBody, CreateStaffBody, ResetStaffPasswordBody, UpdateStaffBody, UpdateStaffStatusBody } from './admin.validation';
 
 const STAFF_SELECT = {
   id: true,
@@ -28,6 +28,8 @@ const STAFF_SELECT = {
     },
   },
 } as const;
+
+const STAFF_ROLES = ['ADMIN', 'WARDEN', 'TRUSTEE', 'ACCOUNTANT', 'LAUNDRY_STAFF'] as const;
 
 function makeActivationToken(): string {
   return crypto.randomBytes(24).toString('hex');
@@ -119,7 +121,7 @@ export async function activateStaffAccountByToken(payload: ActivateStaffBody) {
 
 export async function listStaffAccounts() {
   const users = await prisma.user.findMany({
-    where: { role: { in: ['ADMIN', 'WARDEN', 'TRUSTEE', 'ACCOUNTANT', 'LAUNDRY_STAFF'] } },
+    where: { role: { in: STAFF_ROLES as unknown as Role[] } },
     select: STAFF_SELECT,
     orderBy: { createdAt: 'desc' },
   });
@@ -129,7 +131,7 @@ export async function listStaffAccounts() {
 
 export async function getStaffAccountById(id: string) {
   const user = await prisma.user.findFirst({
-    where: { id, role: { in: ['ADMIN', 'WARDEN', 'TRUSTEE', 'ACCOUNTANT', 'LAUNDRY_STAFF'] } },
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
     select: STAFF_SELECT,
   });
 
@@ -142,7 +144,7 @@ export async function getStaffAccountById(id: string) {
 
 export async function updateStaffAccount(id: string, payload: UpdateStaffBody) {
   const existing = await prisma.user.findFirst({
-    where: { id, role: { in: ['ADMIN', 'WARDEN', 'TRUSTEE', 'ACCOUNTANT', 'LAUNDRY_STAFF'] } },
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
     select: { id: true, staffProfile: true },
   });
 
@@ -174,7 +176,7 @@ export async function updateStaffAccount(id: string, payload: UpdateStaffBody) {
 
 export async function updateStaffStatus(id: string, payload: UpdateStaffStatusBody) {
   const existing = await prisma.user.findFirst({
-    where: { id, role: { in: ['ADMIN', 'WARDEN', 'TRUSTEE', 'ACCOUNTANT', 'LAUNDRY_STAFF'] } },
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
     select: { id: true },
   });
 
@@ -189,4 +191,68 @@ export async function updateStaffStatus(id: string, payload: UpdateStaffStatusBo
   });
 
   return mapStaffPayload(updated);
+}
+
+export async function disableStaffAccount(id: string) {
+  const existing = await prisma.user.findFirst({
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw AppError.notFound('Staff account');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { isActive: false, accountStatus: 'SUSPENDED' as any },
+    select: STAFF_SELECT,
+  });
+
+  return mapStaffPayload(updated);
+}
+
+export async function enableStaffAccount(id: string) {
+  const existing = await prisma.user.findFirst({
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw AppError.notFound('Staff account');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { isActive: true, accountStatus: 'ACTIVE' as any },
+    select: STAFF_SELECT,
+  });
+
+  return mapStaffPayload(updated);
+}
+
+export async function sendStaffOtp(id: string) {
+  const existing = await prisma.user.findFirst({
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw AppError.notFound('Staff account');
+  }
+
+  return sendOtpToUser(id);
+}
+
+export async function resetStaffPassword(id: string, payload: ResetStaffPasswordBody) {
+  const existing = await prisma.user.findFirst({
+    where: { id, role: { in: STAFF_ROLES as unknown as Role[] } },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw AppError.notFound('Staff account');
+  }
+
+  return resetUserPassword(id, payload.password);
 }
