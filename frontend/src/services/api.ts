@@ -472,6 +472,18 @@ export async function resetStaffPassword(id: string, payload: ResetStaffPassword
   return apiPost<{ success?: boolean; message?: string }>(`v1/admin/staff/${id}/reset-password`, payload);
 }
 
+export async function requestStaffActivationOtp(email: string): Promise<{ message: string }> {
+  return apiPost<{ message: string }>("v1/auth/request-otp", { email });
+}
+
+export async function verifyStaffActivationOtp(email: string, otp: string): Promise<{ message?: string }> {
+  return apiPost<{ message?: string }>("v1/auth/verify-otp", { email, otp });
+}
+
+export async function activateStaffAccountWithToken(token: string, password: string): Promise<{ id: string; email: string }> {
+  return apiPost<{ id: string; email: string }>("v1/admin/activate-account", { token, password });
+}
+
 export async function getParentVisitorRequests(): Promise<VisitorRequest[]> {
   return apiGet<VisitorRequest[]>("v1/visitor/student");
 }
