@@ -92,6 +92,8 @@ export async function createStaffAccount(actorId: string, payload: CreateStaffBo
     select: STAFF_SELECT,
   });
 
+  await sendOtpToUser(user.id);
+
   const employeeCode = `STF-${Date.now().toString().slice(-6)}`;
   await prisma.staff.create({
     data: {
@@ -254,5 +256,5 @@ export async function resetStaffPassword(id: string, payload: ResetStaffPassword
     throw AppError.notFound('Staff account');
   }
 
-  return resetUserPassword(id, payload.password);
+  return resetUserPassword(id, payload.password, payload.otp);
 }

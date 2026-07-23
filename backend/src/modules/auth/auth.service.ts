@@ -91,17 +91,62 @@ export async function sendOtpToUser(userId: string): Promise<{ message: string }
     throw AppError.notFound('User');
   }
 
-  if (!user.isActive) {
-    throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
-  }
-
   const otp = generateOtp6Digits();
   await storeOtpForUser(user.id, otp, 10);
 
   return { message: 'OTP sent successfully' };
 }
 
-export async function resetUserPassword(userId: string, password: string): Promise<{ id: string; email: string }> {
+async function verifyOtpForUser(userId: string, otp: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      isActive: true,
+      otpHash: true,
+      otpAttempts: true,
+      otpExpiry: true,
+    },
+  });
+
+  if (!user) {
+    throw AppError.notFound('User');
+  }
+
+  if (!user.isActive) {
+    throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
+  }
+
+  if (!user.otpHash || !user.otpExpiry || user.otpExpiry <= new Date()) {
+    throw AppError.badRequest('OTP expired. Please request a new one.');
+  }
+
+  if (user.otpAttempts >= 5) {
+    throw AppError.badRequest('Too many OTP attempts. Please request a new OTP.');
+  }
+
+  const isValidOtp = await bcrypt.compare(otp, user.otpHash);
+  if (!isValidOtp) {
+    const nextAttempts = Math.min((user.otpAttempts ?? 0) + 1, 5);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { otpAttempts: nextAttempts },
+    });
+
+    throw AppError.badRequest(nextAttempts >= 5 ? 'Too many OTP attempts. Please request a new OTP.' : 'Invalid OTP');
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      otpHash: null,
+      otpExpiry: null,
+      otpAttempts: 0,
+    },
+  });
+}
+
+export async function resetUserPassword(userId: string, password: string, otp?: string): Promise<{ id: string; email: string }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true },
@@ -109,6 +154,10 @@ export async function resetUserPassword(userId: string, password: string): Promi
 
   if (!user) {
     throw AppError.notFound('User');
+  }
+
+  if (otp) {
+    await verifyOtpForUser(userId, otp);
   }
 
   const passwordHash = await bcrypt.hash(password, env.BCRYPT_ROUNDS);
