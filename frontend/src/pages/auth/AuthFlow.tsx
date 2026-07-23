@@ -12,7 +12,9 @@ import {
 
 type Screen =
   | "splash" | "welcome" | "role" | "login" | "forgot" | "otp" | "reset"
-  | "reg1" | "reg2" | "reg3" | "reg4" | "reg5" | "success" | "face" | "profile";
+  | "reg1" | "reg2" | "reg3" | "reg4" | "reg5" | "success" | "face" | "profile"
+  // Staff activation flow
+  | "staff-activate" | "staff-otp" | "staff-create-password" | "staff-activation-success";
 
 export interface AuthFlowProps {
   onAuthComplete: (role: string) => void;
@@ -479,6 +481,286 @@ function OTPScreen({ onVerify, onBack }: { onVerify: () => void; onBack: () => v
 }
 
 // ── 7. Reset Password ─────────────────────────────────────────────────────────
+
+// ── 5.5 Staff activation steps (reuse OTP + reset UIs, no redesign) ──────────────
+
+function StaffActivateScreen({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const [staffId, setStaffId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const valid = staffId.trim().length >= 3;
+  const error = staffId.trim() === "" ? "Staff identifier is required" : staffId.trim().length < 3 ? "Enter a valid identifier" : "";
+
+  const handle = () => {
+    if (!valid || loading) return;
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      onNext();
+    }, 1500);
+  };
+
+  return (
+    <div className="w-full min-h-full flex flex-col bg-[#F8FAFC]">
+      <BackHeader title="Staff Activation" onBack={onBack} />
+      <div className="flex-1 px-5 pt-4 pb-10 flex flex-col">
+        <div className="w-full h-44 rounded-3xl bg-[#EFF6FF] flex items-center justify-center mb-6">
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-3xl bg-white mx-auto flex items-center justify-center mb-2 shadow-md">
+              <Shield size={36} className="text-[#2563EB]" />
+            </div>
+            <p className="text-sm font-semibold text-[#2563EB]">Activate your staff account</p>
+          </div>
+        </div>
+
+        <h2 className="font-black text-xl text-slate-800">Verify your account</h2>
+        <p className="text-slate-500 text-sm mt-2 mb-6 leading-relaxed">
+          Enter your staff identifier. We will send a 6-digit OTP to verify the activation.
+        </p>
+
+        <InputField
+          label="Staff Identifier"
+          placeholder="e.g. staff@hostelpaglu.in"
+          icon={<Mail size={18} />}
+          type="text"
+          value={staffId}
+          onChange={setStaffId}
+          error={error ? error : undefined}
+          helper={!error ? "OTP will be sent after verification" : undefined}
+        />
+
+        <div className="flex-1" />
+        <PrimaryButton label={loading ? "Sending OTP…" : "Send OTP"} onClick={handle} loading={loading} disabled={!valid} />
+      </div>
+    </div>
+  );
+}
+
+function StaffOTPScreen({ onVerify, onBack }: { onVerify: () => void; onBack: () => void }) {
+  // Reuse OTP UI with staff-specific messaging.
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [loading, setLoading] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [timer, setTimer] = useState(30);
+  const refs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (timer > 0) {
+      const t = setTimeout(() => setTimer((x) => x - 1), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [timer]);
+
+  const handleInput = (idx: number, val: string) => {
+    if (!/^\d*$/.test(val)) return;
+    const next = [...otp];
+    next[idx] = val.slice(-1);
+    setOtp(next);
+    if (val && idx < 5) refs.current[idx + 1]?.focus();
+  };
+
+  const handleKey = (idx: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otp[idx] && idx > 0) refs.current[idx - 1]?.focus();
+  };
+
+  const filled = otp.every((d) => d !== "");
+  const handle = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      onVerify();
+    }, 1500);
+  };
+
+  return (
+    <div className="w-full min-h-full flex flex-col bg-[#F8FAFC]">
+      <BackHeader title="OTP Verification" onBack={onBack} />
+      <div className="flex-1 px-5 pt-4 pb-10 flex flex-col">
+        <div className="w-20 h-20 rounded-3xl bg-[#EFF6FF] mx-auto flex items-center justify-center mb-5">
+          <Shield size={36} className="text-[#2563EB]" />
+        </div>
+        <h2 className="font-black text-xl text-slate-800 text-center">Enter Verification Code</h2>
+        <p className="text-slate-500 text-sm mt-2 mb-8 text-center leading-relaxed">
+          We sent a 6-digit code to<br />
+          <span className="font-semibold text-slate-700">your registered email</span>
+        </p>
+
+        <div className="flex gap-2 justify-center mb-6">
+          {otp.map((d, i) => (
+            <input
+              key={i}
+              ref={(el) => {
+                refs.current[i] = el;
+              }}
+              value={d}
+              onChange={(e) => handleInput(i, e.target.value)}
+              onKeyDown={(e) => handleKey(i, e)}
+              maxLength={1}
+              type="tel"
+              className={`w-12 h-14 rounded-2xl text-center text-xl font-bold outline-none border-2 transition-all bg-white ${d ? "border-[#2563EB] text-[#2563EB]" : "border-slate-200 text-slate-800"} focus:border-[#2563EB]`}
+              style={{ boxShadow: d ? "0 4px 12px rgba(37,99,235,0.15)" : "0 1px 4px rgba(0,0,0,0.06)" }}
+            />
+          ))}
+        </div>
+
+        <div className="text-center mb-8">
+          {timer > 0 ? (
+            <p className="text-sm text-slate-500">Resend OTP in <span className="font-bold text-[#2563EB]">00:{String(timer).padStart(2, "0")}</span></p>
+          ) : (
+            <button
+              onClick={() => {
+                setTimer(30);
+                setResent(true);
+              }}
+              className="text-sm font-bold text-[#2563EB]"
+            >
+              Resend OTP
+            </button>
+          )}
+          {resent && <p className="text-xs text-green-600 mt-1 font-medium">New OTP sent!</p>}
+        </div>
+
+        {filled && !loading && (
+          <div className="mb-4 p-3 rounded-2xl bg-green-50 border border-green-200 flex items-center gap-2">
+            <CheckCircle size={16} className="text-green-500" />
+            <p className="text-xs text-green-700 font-medium">Code looks good! Tap verify to continue.</p>
+          </div>
+        )}
+
+        <div className="flex-1" />
+        <PrimaryButton label="Verify OTP" onClick={handle} loading={loading} disabled={!filled} />
+      </div>
+    </div>
+  );
+}
+
+function StaffCreatePasswordScreen({ onCreate, onBack }: { onCreate: () => void; onBack: () => void }) {
+  // Reuse Reset password UI with staff activation success wording.
+  const [pass, setPass] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show1, setShow1] = useState(false);
+  const [show2, setShow2] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const strength = pass.length === 0 ? 0 : pass.length < 6 ? 1 : pass.length < 10 ? 2 : /[A-Z]/.test(pass) && /\d/.test(pass) ? 4 : 3;
+  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strength];
+  const strengthColor = ["", "#EF4444", "#F59E0B", "#10B981", "#2563EB"][strength];
+
+  const valid = pass.length >= 8 && pass === confirm;
+  const handle = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      onCreate();
+    }, 1500);
+  };
+
+  return (
+    <div className="w-full min-h-full flex flex-col bg-[#F8FAFC]">
+      <BackHeader title="Create Password" onBack={onBack} />
+      <div className="flex-1 px-5 pt-4 pb-10 flex flex-col gap-5">
+        <div className="p-4 rounded-2xl bg-[#EFF6FF] flex items-start gap-3">
+          <CheckCircle size={20} className="text-[#2563EB] flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-[#1E40AF] font-medium">OTP verified. Create a secure password for your staff account.</p>
+        </div>
+
+        <div>
+          <InputField
+            label="New Password"
+            placeholder="Min 8 characters"
+            icon={<Lock size={18} />}
+            type={show1 ? "text" : "password"}
+            value={pass}
+            onChange={setPass}
+            rightIcon={<button onClick={() => setShow1(!show1)}>{show1 ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
+          />
+          {pass.length > 0 && (
+            <div className="mt-2">
+              <div className="flex gap-1 mb-1">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-1.5 flex-1 rounded-full transition-all duration-300"
+                    style={{ background: i <= strength ? strengthColor : "#E2E8F0" }}
+                  />
+                ))}
+              </div>
+              <p className="text-xs font-semibold" style={{ color: strengthColor }}>{strengthLabel} password</p>
+            </div>
+          )}
+        </div>
+
+        <InputField
+          label="Confirm Password"
+          placeholder="Repeat your password"
+          icon={<Lock size={18} />}
+          type={show2 ? "text" : "password"}
+          value={confirm}
+          onChange={setConfirm}
+          rightIcon={<button onClick={() => setShow2(!show2)}>{show2 ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
+          error={confirm.length > 0 && pass !== confirm ? "Passwords do not match" : undefined}
+        />
+
+        <div className="space-y-2">
+          {[
+            { rule: "At least 8 characters", ok: pass.length >= 8 },
+            { rule: "One uppercase letter", ok: /[A-Z]/.test(pass) },
+            { rule: "One number", ok: /\d/.test(pass) },
+          ].map((r) => (
+            <div key={r.rule} className="flex items-center gap-2">
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center ${r.ok ? "bg-green-500" : "bg-slate-200"}`}>
+                {r.ok && <Check size={10} className="text-white" />}
+              </div>
+              <span className={`text-xs font-medium ${r.ok ? "text-green-700" : "text-slate-400"}`}>{r.rule}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+        <PrimaryButton label={loading ? "Creating…" : "Create Password"} onClick={handle} loading={loading} disabled={!valid} />
+      </div>
+    </div>
+  );
+}
+
+function StaffActivationSuccessScreen({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-[#F8FAFC] px-6">
+      <div className="relative mb-8">
+        <div className="w-36 h-36 rounded-full bg-green-100 flex items-center justify-center">
+          <div className="w-24 h-24 rounded-full bg-green-500 flex items-center justify-center shadow-xl shadow-green-200">
+            <Check size={44} className="text-white" strokeWidth={3} />
+          </div>
+        </div>
+        <div className="absolute inset-0 rounded-full border-4 border-green-300 animate-ping opacity-30" />
+      </div>
+
+      <h1 className="font-black text-3xl text-slate-800 text-center">Account Activated!</h1>
+      <p className="text-slate-500 text-base mt-3 text-center leading-relaxed">
+        Your staff account is now active. You can sign in to access your dashboard.
+      </p>
+
+      <div className="w-full mt-6 p-5 rounded-3xl bg-white border border-slate-100 shadow-lg">
+        <p className="text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider">Next Steps</p>
+        <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+          <span className="text-sm text-slate-500 font-medium">Sign in</span>
+          <span className="text-sm font-bold text-slate-800">to continue</span>
+        </div>
+        <div className="flex items-center justify-between py-2.5">
+          <span className="text-sm text-slate-500 font-medium">Need help?</span>
+          <span className="text-xs font-bold text-blue-700">Contact admin</span>
+        </div>
+      </div>
+
+      <div className="w-full mt-6 space-y-3">
+        <PrimaryButton label="Go to Sign In" onClick={onNext} icon={<ArrowRight size={20} />} />
+        <button onClick={onBack} className="w-full text-[#2563EB] font-semibold text-base py-2">
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ResetScreen({ onReset, onBack }: { onReset: () => void; onBack: () => void }) {
   const [pass, setPass] = useState("");

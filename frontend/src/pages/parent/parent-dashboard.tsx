@@ -132,18 +132,11 @@ export function ParentDashboard() {
   };
 
   const recentActivities = useMemo(() => {
-    const notifications = (notificationsQuery.data ?? []).slice(0, 4).map((item: any) => ({
+    return (notificationsQuery.data ?? []).slice(0, 4).map((item: any) => ({
       type: item?.type === 'leave' ? 'leave' : item?.type === 'fee' ? 'reward' : 'entry',
       time: item?.createdAt ? new Date(item.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'Recently updated',
       description: item?.title || item?.body || 'New update received',
     }));
-
-    if (notifications.length) return notifications;
-    return [
-      { type: 'entry', time: 'Recently updated', description: 'Attendance data synced' },
-      { type: 'leave', time: 'Recently updated', description: 'Leave records synced' },
-      { type: 'reward', time: 'Recently updated', description: 'Fee records synced' },
-    ];
   }, [notificationsQuery.data]);
 
   const refreshDashboard = async () => {
@@ -173,7 +166,7 @@ export function ParentDashboard() {
             >
               <Bell className="text-white" size={20} />
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive rounded-full text-white text-xs flex items-center justify-center">
-                3
+                {parentDashboard.notificationCount}
               </span>
             </button>
           </div>
@@ -285,7 +278,9 @@ export function ParentDashboard() {
 
           <Card className="bg-card border-border">
             <div className="divide-y divide-border">
-              {recentActivities.map((activity, index) => (
+              {recentActivities.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground">No recent activity yet.</div>
+              ) : recentActivities.map((activity, index) => (
                 <div key={index} className="p-4 flex items-start space-x-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                     activity.type === 'entry' ? 'bg-blue-100' :

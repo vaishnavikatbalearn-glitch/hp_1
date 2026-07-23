@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Home, Users, Bell, UserCheck, AlertCircle, BarChart3, FileText, Shield, Calendar } from 'lucide-react';
+import { Home, Users, Bell, UserCheck, AlertCircle, BarChart3, FileText, Shield, Calendar, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { apiClient } from '../../auth-integration/src/api/axiosInstance';
@@ -299,7 +299,9 @@ export function WardenDashboard() {
             <h3 className="text-base mb-4">Recent Activities</h3>
             <Card className="bg-card border-border">
               <div className="divide-y divide-border">
-                {recentActivities.map((activity, index) => (
+                {recentActivities.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">No recent activity yet.</div>
+                ) : recentActivities.map((activity, index) => (
                   <div key={`${activity.type}-${index}`} className="p-4 flex items-start space-x-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                       activity.type === 'leave' ? 'bg-amber-100' :

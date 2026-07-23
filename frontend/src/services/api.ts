@@ -101,6 +101,46 @@ export interface NotificationItem {
   isRead?: boolean;
 }
 
+export type StaffRole = 'ADMIN' | 'WARDEN' | 'TRUSTEE' | 'ACCOUNTANT' | 'LAUNDRY_STAFF';
+
+export interface StaffAccountRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  mobileNumber?: string | null;
+  role: StaffRole | string;
+  hostelAssignment?: string | null;
+  status?: string | null;
+  createdBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  activationToken?: string | null;
+  otpExpiry?: string | null;
+  employeeCode?: string | null;
+  isActive?: boolean;
+}
+
+export interface CreateStaffPayload {
+  fullName: string;
+  email: string;
+  phone: string;
+  role: StaffRole;
+  hostelId: string;
+}
+
+export interface UpdateStaffPayload {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  role?: StaffRole;
+  hostelId?: string;
+}
+
+export interface ResetStaffPasswordPayload {
+  password: string;
+  otp?: string;
+}
+
 export interface StudentRecord {
   id: string;
   userId: string;
@@ -402,6 +442,34 @@ export async function createNotification(payload: { title: string; body: string;
 
 export async function markNotificationAsRead(id: string): Promise<NotificationItem> {
   return apiPatch<NotificationItem>(`/v1/notifications/${id}/read`, {});
+}
+
+export async function listStaffAccounts(): Promise<StaffAccountRecord[]> {
+  return apiGet<StaffAccountRecord[]>("v1/admin/staff");
+}
+
+export async function createStaffAccount(payload: CreateStaffPayload): Promise<{ staff: StaffAccountRecord; activationToken?: string; activationExpiresAt?: string }> {
+  return apiPost<{ staff: StaffAccountRecord; activationToken?: string; activationExpiresAt?: string }>("v1/admin/staff", payload);
+}
+
+export async function updateStaffAccount(id: string, payload: UpdateStaffPayload): Promise<StaffAccountRecord> {
+  return apiPatch<StaffAccountRecord>(`v1/admin/staff/${id}`, payload);
+}
+
+export async function disableStaffAccount(id: string): Promise<StaffAccountRecord> {
+  return apiPatch<StaffAccountRecord>(`v1/admin/staff/${id}/disable`, {});
+}
+
+export async function enableStaffAccount(id: string): Promise<StaffAccountRecord> {
+  return apiPatch<StaffAccountRecord>(`v1/admin/staff/${id}/enable`, {});
+}
+
+export async function sendStaffOtp(id: string): Promise<{ success?: boolean; message?: string }> {
+  return apiPost<{ success?: boolean; message?: string }>(`v1/admin/staff/${id}/send-otp`, {});
+}
+
+export async function resetStaffPassword(id: string, payload: ResetStaffPasswordPayload): Promise<{ success?: boolean; message?: string }> {
+  return apiPost<{ success?: boolean; message?: string }>(`v1/admin/staff/${id}/reset-password`, payload);
 }
 
 export async function getParentVisitorRequests(): Promise<VisitorRequest[]> {

@@ -3,6 +3,7 @@
 // All screens are preserved exactly as generated from Figma.
 
 import React, { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -17,7 +18,24 @@ import {
   MapPin, Package, RefreshCw, ChevronDown, Hash, Filter,
   Percent, LogOut, Phone,
 } from "lucide-react";
-import { getNotifications, markNotificationAsRead, getPendingFees, payFee, apiGet, type FeeRecord, type NotificationItem } from "../../services/api";
+import {
+  getNotifications,
+  markNotificationAsRead,
+  getPendingFees,
+  payFee,
+  apiGet,
+  createStaffAccount as createStaffAccountRequest,
+  disableStaffAccount as disableStaffAccountRequest,
+  enableStaffAccount as enableStaffAccountRequest,
+  listStaffAccounts,
+  resetStaffPassword as resetStaffPasswordRequest,
+  sendStaffOtp as sendStaffOtpRequest,
+  updateStaffAccount as updateStaffAccountRequest,
+  type FeeRecord,
+  type NotificationItem,
+  type StaffAccountRecord,
+  type StaffRole,
+} from "../../services/api";
 
 // ─── MOCK DATA ────────────────────────────────────────────────
 const mockStudents = [
@@ -564,6 +582,218 @@ function SuperAdminDashboard() {
 
 function RoleManagementScreen() {
   const [selected, setSelected] = useState<typeof mockRoles[0] | null>(null);
+  const queryClient = useQueryClient();
+  const [staffMessage, setStaffMessage] = useState<string | null>(null);
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [showCreateStaff, setShowCreateStaff] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    role: "ADMIN" as StaffRole,
+    hostelId: "",
+  });
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    role: "ADMIN" as StaffRole,
+    hostelId: "",
+  });
+  const [resetForm, setResetForm] = useState<{ id: string | null; otp: string; password: string }>({
+    id: null,
+    otp: "",
+    password: "",
+  });
+
+  const staffQuery = useQuery<StaffAccountRecord[], Error>({
+    queryKey: ["staff-accounts"],
+    queryFn: listStaffAccounts,
+  });
+
+  const staffAccounts = staffQuery.data ?? [];
+  const staffLoading = staffQuery.isLoading;
+  const staffErrorMessage = staffQuery.error
+    ? (staffQuery.error instanceof Error ? staffQuery.error.message : "Unable to load staff accounts.")
+    : null;
+
+  const createStaffMutation = useMutation({
+    mutationFn: createStaffAccountRequest,
+    onSuccess: async () => {
+      setCreateForm({ fullName: "", email: "", phone: "", role: "ADMIN", hostelId: "" });
+      setShowCreateStaff(false);
+      setStaffMessage("Staff account created and activation OTP has been sent.");
+      await queryClient.invalidateQueries({ queryKey: ["staff-accounts"] });
+    },
+    onError: (error) => {
+      setStaffError(error instanceof Error ? error.message : "Unable to create staff account.");
+    },
+  });
+
+  const updateStaffMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Record<string, string> }) => updateStaffAccountRequest(id, payload),
+    onSuccess: async () => {
+      setEditingAccountId(null);
+      setStaffMessage("Staff account updated successfully.");
+      await queryClient.invalidateQueries({ queryKey: ["staff-accounts"] });
+    },
+    onError: (error) => {
+      setStaffError(error instanceof Error ? error.message : "Unable to update staff account.");
+    },
+  });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ account, isEnable }: { account: StaffAccountRecord; isEnable: boolean }) => {
+      if (isEnable) {
+        return enableStaffAccountRequest(account.id);
+      }
+      return disableStaffAccountRequest(account.id);
+    },
+    onSuccess: async (_data, variables) => {
+      setStaffMessage(`${variables.account.fullName} has been ${variables.isEnable ? "enabled" : "disabled"}.`);
+      await queryClient.invalidateQueries({ queryKey: ["staff-accounts"] });
+    },
+    onError: (error) => {
+      setStaffError(error instanceof Error ? error.message : "Unable to change staff status.");
+    },
+  });
+
+  const sendOtpMutation = useMutation({
+    mutationFn: (id: string) => sendStaffOtpRequest(id),
+    onSuccess: (_data, id) => {
+      setStaffMessage(`Activation OTP sent for staff account ${id}.`);
+    },
+    onError: (error) => {
+      setStaffError(error instanceof Error ? error.message : "Unable to send activation OTP.");
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { password: string; otp?: string } }) => resetStaffPasswordRequest(id, payload),
+    onSuccess: (_data, variables) => {
+      setResetForm({ id: null, otp: "", password: "" });
+      setStaffMessage(`Password reset completed for ${variables.id}.`);
+    },
+    onError: (error) => {
+      setStaffError(error instanceof Error ? error.message : "Unable to reset the password.");
+    },
+  });
+
+  const handleCreateStaff = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!createForm.fullName.trim() || !createForm.email.trim() || !createForm.phone.trim() || !createForm.hostelId.trim()) {
+      setStaffError("Please fill in the full name, email, phone, and hostel ID.");
+      return;
+    }
+
+    setStaffError(null);
+    await createStaffMutation.mutateAsync({
+      fullName: createForm.fullName.trim(),
+      email: createForm.email.trim(),
+      phone: createForm.phone.trim(),
+      role: createForm.role,
+      hostelId: createForm.hostelId.trim(),
+    });
+  };
+
+  const handleToggleStatus = async (account: StaffAccountRecord) => {
+    setActionLoadingId(account.id);
+    setStaffError(null);
+    try {
+      await toggleStatusMutation.mutateAsync({ account, isEnable: !Boolean(account.isActive ?? normalizeStatus(account.status) === "ACTIVE") });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleSendOtp = async (account: StaffAccountRecord) => {
+    setActionLoadingId(account.id);
+    setStaffError(null);
+    try {
+      await sendOtpMutation.mutateAsync(account.id);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleResetPassword = async (account: StaffAccountRecord) => {
+    if (!resetForm.password.trim()) {
+      setStaffError("Please enter a new password.");
+      return;
+    }
+
+    setActionLoadingId(account.id);
+    setStaffError(null);
+    try {
+      await resetPasswordMutation.mutateAsync({
+        id: account.id,
+        payload: {
+          password: resetForm.password.trim(),
+          otp: resetForm.otp.trim() || undefined,
+        },
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleStartEdit = (account: StaffAccountRecord) => {
+    setEditingAccountId(account.id);
+    setEditForm({
+      fullName: account.fullName,
+      email: account.email,
+      phone: account.mobileNumber ?? "",
+      role: (account.role as StaffRole) || "ADMIN",
+      hostelId: account.hostelAssignment ?? "",
+    });
+  };
+
+  const handleSaveEdit = async (account: StaffAccountRecord) => {
+    if (!editForm.fullName.trim() || !editForm.email.trim() || !editForm.phone.trim()) {
+      setStaffError("Please fill in the full name, email, and phone before saving.");
+      return;
+    }
+
+    setStaffError(null);
+    await updateStaffMutation.mutateAsync({
+      id: account.id,
+      payload: {
+        fullName: editForm.fullName.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim(),
+        role: editForm.role,
+        hostelId: editForm.hostelId.trim(),
+      },
+    });
+  };
+
+  const getRoleLabel = (role?: string | null) => {
+    switch (role) {
+      case "ADMIN":
+        return "Admin";
+      case "WARDEN":
+        return "Warden";
+      case "TRUSTEE":
+        return "Trustee";
+      case "ACCOUNTANT":
+        return "Accountant";
+      case "LAUNDRY_STAFF":
+        return "Laundry Staff";
+      default:
+        return role || "Staff";
+    }
+  };
+
+  const getStatusLabel = (status?: string | null) => {
+    const normalized = String(status ?? "").toUpperCase();
+    if (normalized === "ACTIVE") return "Active";
+    if (normalized === "SUSPENDED") return "Suspended";
+    if (normalized === "PENDING_ACTIVATION") return "Pending activation";
+    return normalized.replace(/_/g, " ");
+  };
+
   if (selected) {
     return (
       <div className="flex-1 overflow-y-auto bg-slate-50 pb-20 flex flex-col">
@@ -612,8 +842,37 @@ function RoleManagementScreen() {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 pb-20 flex flex-col">
       <ScreenHeader title="Role Management" subtitle="Manage user roles & permissions"
-        action={<button className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center"><Plus className="w-4 h-4 text-white" /></button>} />
+        action={
+          <button onClick={() => setShowCreateStaff(true)} className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
+            <Plus className="w-4 h-4 text-white" />
+          </button>
+        } />
       <div className="px-4 py-4">
+        {showCreateStaff && (
+          <form onSubmit={handleCreateStaff} className="bg-white rounded-2xl p-4 shadow-sm border border-blue-50 mb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-700">Create Staff Account</h3>
+              <button type="button" onClick={() => setShowCreateStaff(false)} className="text-xs font-semibold text-slate-500">Cancel</button>
+            </div>
+            <div className="grid gap-3">
+              <input value={createForm.fullName} onChange={(event) => setCreateForm((current) => ({ ...current, fullName: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Full name" />
+              <input value={createForm.email} onChange={(event) => setCreateForm((current) => ({ ...current, email: event.target.value }))} type="email" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Email" />
+              <input value={createForm.phone} onChange={(event) => setCreateForm((current) => ({ ...current, phone: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Phone" />
+              <select value={createForm.role} onChange={(event) => setCreateForm((current) => ({ ...current, role: event.target.value as StaffRole }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none">
+                <option value="ADMIN">Admin</option>
+                <option value="WARDEN">Warden</option>
+                <option value="TRUSTEE">Trustee</option>
+                <option value="ACCOUNTANT">Accountant</option>
+                <option value="LAUNDRY_STAFF">Laundry Staff</option>
+              </select>
+              <input value={createForm.hostelId} onChange={(event) => setCreateForm((current) => ({ ...current, hostelId: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Hostel UUID" />
+            </div>
+            {staffError && <p className="text-xs text-red-600">{staffError}</p>}
+            <button type="submit" className="w-full bg-blue-700 text-white py-2.5 rounded-xl text-sm font-bold">
+              {staffLoading ? "Creating..." : "Create Staff Account"}
+            </button>
+          </form>
+        )}
         <div className="grid grid-cols-3 gap-3 mb-4">
           {[["7", "Total Roles", "blue"], ["276", "Total Users", "green"], ["12", "Permissions", "purple"]].map(([v, l, c]) => (
             <div key={l} className={`bg-white rounded-2xl p-3 text-center shadow-sm border border-blue-50`}>
@@ -639,6 +898,82 @@ function RoleManagementScreen() {
               <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
             </button>
           ))}
+        </div>
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <SectionTitle title="Live Staff Accounts" />
+            <span className="text-[11px] font-semibold text-blue-600">{staffAccounts.length} active</span>
+          </div>
+          {staffMessage && <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{staffMessage}</div>}
+          {staffErrorMessage && <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{staffErrorMessage}</div>}
+          {staffError && <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{staffError}</div>}
+          {staffLoading ? (
+            <div className="rounded-2xl border border-blue-50 bg-white p-3 text-sm text-slate-500 shadow-sm">Loading staff accounts...</div>
+          ) : staffAccounts.length === 0 ? (
+            <div className="rounded-2xl border border-blue-50 bg-white p-3 text-sm text-slate-500 shadow-sm">No staff accounts found yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {staffAccounts.map((account) => {
+                const isActive = account.isActive ?? normalizeStatus(account.status) === "ACTIVE";
+                const isResetOpen = resetForm.id === account.id;
+                const isEditing = editingAccountId === account.id;
+                return (
+                  <div key={account.id} className="rounded-2xl border border-blue-50 bg-white p-3 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 font-extrabold text-blue-700">{account.fullName?.[0] || "S"}</div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-slate-800">{account.fullName}</h4>
+                          <p className="truncate text-xs text-slate-500">{account.email}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">{getRoleLabel(account.role)}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isActive ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{getStatusLabel(account.status)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button onClick={() => handleStartEdit(account)} className="rounded-xl bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">Edit</button>
+                        <button onClick={() => handleToggleStatus(account)} disabled={actionLoadingId === account.id || toggleStatusMutation.isPending} className={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold ${isActive ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {actionLoadingId === account.id ? "Working..." : isActive ? "Disable" : "Enable"}
+                        </button>
+                        <button onClick={() => handleSendOtp(account)} disabled={actionLoadingId === account.id || sendOtpMutation.isPending} className="rounded-xl bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">Send OTP</button>
+                        <button onClick={() => setResetForm((current) => ({ ...current, id: account.id, otp: "", password: "" }))} className="rounded-xl bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-700">Reset PW</button>
+                      </div>
+                    </div>
+                    {isEditing && (
+                      <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <input value={editForm.fullName} onChange={(event) => setEditForm((current) => ({ ...current, fullName: event.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Full name" />
+                        <input value={editForm.email} onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Email" />
+                        <input value={editForm.phone} onChange={(event) => setEditForm((current) => ({ ...current, phone: event.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Phone" />
+                        <select value={editForm.role} onChange={(event) => setEditForm((current) => ({ ...current, role: event.target.value as StaffRole }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none">
+                          <option value="ADMIN">Admin</option>
+                          <option value="WARDEN">Warden</option>
+                          <option value="TRUSTEE">Trustee</option>
+                          <option value="ACCOUNTANT">Accountant</option>
+                          <option value="LAUNDRY_STAFF">Laundry Staff</option>
+                        </select>
+                        <input value={editForm.hostelId} onChange={(event) => setEditForm((current) => ({ ...current, hostelId: event.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Hostel UUID" />
+                        <div className="flex gap-2">
+                          <button onClick={() => handleSaveEdit(account)} disabled={updateStaffMutation.isPending} className="flex-1 rounded-lg bg-blue-700 px-3 py-2 text-sm font-bold text-white">{updateStaffMutation.isPending ? "Saving..." : "Save"}</button>
+                          <button onClick={() => setEditingAccountId(null)} className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                    {isResetOpen && (
+                      <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <input value={resetForm.otp} onChange={(event) => setResetForm((current) => ({ ...current, otp: event.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="OTP (optional)" />
+                        <input value={resetForm.password} onChange={(event) => setResetForm((current) => ({ ...current, password: event.target.value }))} type="password" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="New password" />
+                        <div className="flex gap-2">
+                          <button onClick={() => handleResetPassword(account)} disabled={resetPasswordMutation.isPending} className="flex-1 rounded-lg bg-blue-700 px-3 py-2 text-sm font-bold text-white">{resetPasswordMutation.isPending ? "Updating..." : "Save Password"}</button>
+                          <button onClick={() => setResetForm({ id: null, otp: "", password: "" })} className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

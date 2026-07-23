@@ -77,29 +77,65 @@ export interface StudentPortalProps {
 }
 
 type AttendanceChartPoint = { month: string; present: number; absent: number; leave: number };
-
-const student = {
-  name: "",
-  enrollment: "",
-  room: "",
-  floor: "",
-  dob: "",
-  bloodGroup: "",
-  phone: "",
-  email: "",
-  city: "",
-  state: "",
-  college: "",
-  branch: "",
-  year: "",
-  hostel: "",
-  parentName: "",
-  parentPhone: "",
-  parentEmail: "",
-  leaveBalance: 0,
+type AttendanceSummaryState = { overallAttendance: number; departmentAttendance: number; hostelAttendance: number; dailySummary: string; monthlySummary: string };
+type StudentProfile = {
+  id?: string;
+  name?: string;
+  enrollment?: string;
+  room?: string;
+  floor?: string;
+  dob?: string;
+  bloodGroup?: string;
+  phone?: string;
+  email?: string;
+  city?: string;
+  state?: string;
+  college?: string;
+  branch?: string;
+  year?: string;
+  hostel?: string;
+  parentName?: string;
+  parentPhone?: string;
+  parentEmail?: string;
+  leaveBalance?: number;
+  feeDue?: number;
+  feeDueDueDate?: string;
 };
+type ComplaintItem = { id: string; type?: string; priority: string; status: string; desc: string; created: string; updated: string; assignedTo: string; eta: string };
+type NoticeItem = { id: string; title: string; body: string; date: string; urgent?: boolean; type: string };
+type EventItem = { id: string; title: string; date: string; venue: string; desc: string; guests: string; img: string };
+type InitiativeItem = { id: string; title: string; desc: string; type: string; members: number; interested: number; icon: string };
+type FineItem = { id: string; type: string; reason: string; date: string; amount: number; points: number; isReward: boolean; status?: string };
+type MovementItem = { date: string; exit: string; entry: string; status: string };
 
-const normalizeProfile = (payload: any) => ({
+const movementData: MovementItem[] = [
+  { date: "Today, 09:30", exit: "Main Gate", entry: "Hostel Block A", status: "approved" },
+  { date: "Yesterday, 18:20", exit: "Library", entry: "Hostel Block A", status: "pending" },
+  { date: "Yesterday, 14:10", exit: "Canteen", entry: "Hostel Block A", status: "approved" },
+];
+
+const fines: FineItem[] = [
+  { id: "F-101", type: "Late return", reason: "Returned after curfew", date: "12 Jun 2025", amount: 100, points: 0, isReward: false, status: "pending" },
+  { id: "F-102", type: "Room cleanliness", reason: "Room inspection failed", date: "09 Jun 2025", amount: 50, points: 0, isReward: false, status: "paid" },
+  { id: "R-201", type: "Academic excellence", reason: "Top performance award", date: "03 Jun 2025", amount: 0, points: 20, isReward: true },
+];
+
+const notices: NoticeItem[] = [
+  { id: "N-1", title: "Water supply schedule", body: "Water tankers will be available between 6:00-7:00 AM on Wednesday.", date: "Today", type: "announcement" },
+  { id: "N-2", title: "Night curfew reminder", body: "Please carry your ID card while entering after 10 PM.", date: "Yesterday", urgent: true, type: "pinned" },
+];
+
+const events: EventItem[] = [
+  { id: "E-1", title: "Cultural Fest", date: "24 Jul 2025", venue: "Auditorium", desc: "Join the evening cultural program with music and dance performances.", guests: "Open to all residents", img: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=900&q=80" },
+  { id: "E-2", title: "Sports Day", date: "02 Aug 2025", venue: "Sports Ground", desc: "Inter-hostel tournaments and fun activities.", guests: "Faculty and students", img: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=900&q=80" },
+];
+
+const initiatives: InitiativeItem[] = [
+  { id: "I-1", title: "Green Campus Drive", desc: "Plantation drive for the upcoming semester.", type: "club", members: 42, interested: 18, icon: "🌿" },
+  { id: "I-2", title: "AI Research Lab", desc: "Open workshops for hostel students interested in AI.", type: "research", members: 25, interested: 12, icon: "🤖" },
+];
+
+const normalizeProfile = (payload: any): StudentProfile => ({
   id: payload?.id ?? payload?.studentId ?? "",
   name: payload?.name ?? payload?.fullName ?? "",
   enrollment: payload?.enrollmentNumber ?? payload?.enrollment ?? "",
@@ -250,7 +286,7 @@ const BottomNav = ({ active, onNavigate, unread }: { active: string; onNavigate:
 );
 
 // ─── Screen: Dashboard ────────────────────────────────────────────────────────
-const DashboardScreen = ({ onNavigate, profile, attendanceRate, attendanceRecords, leaveBalance, complaintsOpen, attendanceSummary }: { onNavigate: (s: Screen) => void; profile: Partial<typeof student>; attendanceRate: number; attendanceRecords: Array<{ month: string; present: number; absent: number; leave?: number }>; leaveBalance: number; complaintsOpen: number; attendanceSummary: { overallAttendance?: number; departmentAttendance?: number; hostelAttendance?: number; dailySummary?: string; monthlySummary?: string; }; }) => {
+const DashboardScreen = ({ onNavigate, profile, attendanceRate, attendanceRecords, leaveBalance, complaintsOpen, attendanceSummary }: { onNavigate: (s: Screen) => void; profile: StudentProfile; attendanceRate: number; attendanceRecords: AttendanceChartPoint[]; leaveBalance: number; complaintsOpen: number; attendanceSummary: Partial<AttendanceSummaryState>; }) => {
   const quickActions = [
     { label: "Apply\nLeave", icon: Calendar, screen: "leave-request" as Screen, color: "bg-blue-100 text-blue-700" },
     { label: "Complaint", icon: Wrench, screen: "maintenance" as Screen, color: "bg-amber-100 text-amber-700" },
@@ -395,7 +431,7 @@ const DashboardScreen = ({ onNavigate, profile, attendanceRate, attendanceRecord
 };
 
 // ─── Screen: Profile ──────────────────────────────────────────────────────────
-const ProfileScreen = ({ onBack, profile }: { onBack: () => void; profile: Partial<typeof student> }) => {
+const ProfileScreen = ({ onBack, profile }: { onBack: () => void; profile: StudentProfile }) => {
   const docs = [
     { name: "Aadhaar Card", status: "verified" },
     { name: "College ID", status: "verified" },
@@ -515,7 +551,7 @@ const AttendanceScreen = ({ onBack, onNavigate, studentId }: { onBack: () => voi
       }
 
       const summary = await authService.getAttendanceSummary();
-      const payload = summary?.data ?? summary ?? {};
+      const payload = (summary as any)?.data ?? summary ?? {};
       const dailyEntries = Array.isArray(payload?.daily) ? payload.daily : [];
       const normalized = dailyEntries.map((entry: any) => ({
         date: entry?.date ?? entry?.createdAt ?? entry?.updatedAt,
@@ -1277,7 +1313,7 @@ const MaintenanceScreen = ({ onBack, onNavigate }: { onBack: () => void; onNavig
 };
 
 // ─── Screen: Complaint Tracking ───────────────────────────────────────────────
-const ComplaintsScreen = ({ onBack, complaints }: { onBack: () => void; complaints: typeof complaints }) => (
+const ComplaintsScreen = ({ onBack, complaints }: { onBack: () => void; complaints: ComplaintItem[] }) => (
   <div className="flex-1 overflow-y-auto">
     <BackHeader title="My Complaints" onBack={onBack} />
     <div className="px-4 py-4 space-y-4 pb-6">
@@ -1878,6 +1914,7 @@ const NotificationsScreen = ({ onBack, notifications, onMarkAllRead }: { onBack:
     attendance: "bg-blue-100", laundry: "bg-purple-100",
     fee: "bg-amber-100", complaint: "bg-orange-100", leave: "bg-emerald-100",
   };
+  const notificationType = notifications[0]?.type ?? "attendance";
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="sticky top-0 z-10 bg-white border-b border-blue-50 flex items-center justify-between px-4 h-14">
@@ -1885,21 +1922,24 @@ const NotificationsScreen = ({ onBack, notifications, onMarkAllRead }: { onBack:
         <button onClick={onMarkAllRead} className="text-xs font-semibold text-blue-600">Mark all read</button>
       </div>
       <div className="px-4 py-3 pb-6 space-y-2">
-        {notifications.map((n) => (
-          <div key={n.id} className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-colors ${n.read ? "bg-white border-slate-100" : "bg-blue-50/50 border-blue-100"}`}>
-            <div className={`w-8 h-8 ${bgMap[n.type]} rounded-xl flex items-center justify-center shrink-0`}>
-              {iconMap[n.type]}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <p className={`text-xs font-bold ${n.read ? "text-slate-700" : "text-slate-900"}`}>{n.title}</p>
-                {!n.read && <div className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />}
+        {notifications.map((n) => {
+          const typeKey = n.type ?? notificationType;
+          return (
+            <div key={n.id} className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-colors ${n.read ? "bg-white border-slate-100" : "bg-blue-50/50 border-blue-100"}`}>
+              <div className={`w-8 h-8 ${bgMap[typeKey] ?? bgMap.attendance} rounded-xl flex items-center justify-center shrink-0`}>
+                {iconMap[typeKey] ?? iconMap.attendance}
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">{n.body}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{n.time}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={`text-xs font-bold ${n.read ? "text-slate-700" : "text-slate-900"}`}>{n.title}</p>
+                  {!n.read && <div className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">{n.body}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{n.time}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1946,7 +1986,7 @@ const EmergencyScreen = ({ onBack }: { onBack: () => void }) => {
 };
 
 // ─── Screen: Settings ─────────────────────────────────────────────────────────
-const SettingsScreen = ({ onNavigate, profile }: { onNavigate: (s: Screen) => void; profile: Partial<typeof student> }) => {
+const SettingsScreen = ({ onNavigate, profile }: { onNavigate: (s: Screen) => void; profile: StudentProfile }) => {
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [biometric, setBiometric] = useState(true);
@@ -2080,9 +2120,9 @@ const MoreMenuScreen = ({ onNavigate }: { onNavigate: (s: Screen) => void }) => 
 export default function StudentPortal({ onLogout }: StudentPortalProps) {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [history, setHistory] = useState<Screen[]>([]);
-  const [profile, setProfile] = useState<Partial<typeof student>>({});
-  const [attendanceRecords, setAttendanceRecords] = useState<typeof attendanceData>(attendanceData);
-  const [attendanceSummary, setAttendanceSummary] = useState({ overallAttendance: 0, departmentAttendance: 0, hostelAttendance: 0, dailySummary: "No data", monthlySummary: "No data" });
+  const [profile, setProfile] = useState<StudentProfile>({});
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceChartPoint[]>([]);
+  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummaryState>({ overallAttendance: 0, departmentAttendance: 0, hostelAttendance: 0, dailySummary: "No data", monthlySummary: "No data" });
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [complaintsData, setComplaintsData] = useState<any[]>([]);
   const [notificationsData, setNotificationsData] = useState<NotificationItem[]>([]);
@@ -2157,21 +2197,20 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
     const unreadItems = notificationsData.filter((n) => !n.read);
     if (!unreadItems.length) return;
 
-    const updatedItems = await Promise.all(unreadItems.map((item) => apiClient.patch(`/v1/notifications/${item.id}/read`, {})));
-    const updatedMap = new Map(updatedItems.map((item) => [item.id, item?.data?.data ?? item]));
+    try {
+      await Promise.all(unreadItems.map((item) => apiClient.patch(`/v1/notifications/${item.id}/read`, {})));
+    } catch {
+      // Keep UI behavior intact even if the service call fails.
+    }
 
-    setNotificationsData((prev) => prev.map((item) => {
-      const updated = updatedMap.get(item.id);
-      if (!updated) return item;
-      return { ...item, read: true, isRead: true };
-    }));
+    setNotificationsData((prev) => prev.map((item) => ({ ...item, read: true, isRead: true })));
   };
 
   const attendanceSummaryQuery = useQuery({
     queryKey: ["student-attendance-summary"],
     queryFn: async () => {
       const summary = await authService.getAttendanceSummary();
-      const payload = summary?.data ?? summary ?? {};
+      const payload = (summary as any)?.data ?? summary ?? {};
       const chart = Array.isArray(payload?.daily)
         ? payload.daily.slice(-6).map((entry: any) => ({
             month: new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -2307,7 +2346,7 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
     contact: string;
     details: string;
   }) => {
-    const leave = await api.post('/v1/leave', {
+    const leaveResponse = await api.post('/v1/leave', {
       type: 'HOME',
       startDate: request.startDate,
       endDate: request.endDate,
@@ -2316,6 +2355,7 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
       contactNumber: request.contact,
     });
 
+    const leave = (leaveResponse as any)?.data?.data ?? leaveResponse;
     const normalizedLeave = normalizeLeave(leave);
     const submittedDate = leave?.createdAt
       ? new Date(leave.createdAt).toLocaleDateString('en-GB', {
@@ -2370,7 +2410,7 @@ export default function StudentPortal({ onLogout }: StudentPortalProps) {
       case "notifications": return <NotificationsScreen onBack={goBack} notifications={notificationsData} onMarkAllRead={handleMarkAllRead} />;
       case "emergency": return <EmergencyScreen onBack={goBack} />;
       case "settings": return <SettingsScreen onNavigate={navigateTo} profile={profile} />;
-      default: return <DashboardScreen onNavigate={navigateTo} />;
+      default: return <DashboardScreen onNavigate={navigateTo} profile={profile} attendanceRate={attendanceRate} attendanceRecords={attendanceRecords} leaveBalance={leaveBalanceValue} complaintsOpen={complaintsOpen} attendanceSummary={attendanceSummary} />;
     }
   };
 
