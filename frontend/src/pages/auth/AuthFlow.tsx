@@ -10,7 +10,8 @@ import {
   DollarSign, Shirt, Home, Bell, Settings, Lock, Mail, RefreshCw,
   CheckCircle, AlertCircle, X, Plus,
 } from "lucide-react";
-import { activateStaffAccountWithToken, requestStaffActivationOtp, verifyStaffActivationOtp } from "../../services/api";
+import { activateStaffAccountWithToken, requestStaffActivationOtp, resetPassword } from "../../services/api";
+import { apiClient } from "../../auth-integration/src/api/axiosInstance";
 
 type Screen =
   | "splash" | "welcome" | "role" | "login" | "forgot" | "otp" | "reset"
@@ -20,6 +21,16 @@ type Screen =
 
 export interface AuthFlowProps {
   onAuthComplete: (role: string) => void;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybe = error as { response?: { data?: { message?: string } }; message?: string };
+    if (maybe.response?.data?.message) return maybe.response.data.message;
+    if (maybe.message) return maybe.message;
+  }
+  return fallback;
 }
 
 // ── Mobile Shell ──────────────────────────────────────────────────────────────
@@ -279,13 +290,12 @@ function RoleScreen({ onSelect }: { onSelect: (r: string) => void }) {
 
 // ── 4. Login Screen ───────────────────────────────────────────────────────────
 
-function LoginScreen({ onLogin, onForgot, onBack, onRegister }: {
-  onLogin: () => void; onForgot: () => void; onBack: () => void; onRegister: () => void;
+function LoginScreen({ onLogin, onForgot, onBack, onRegister, loading, error }: {
+  onLogin: (payload: { email: string; password: string }) => void; onForgot: () => void; onBack: () => void; onRegister: () => void; loading?: boolean; error?: string;
 }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   // Validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -297,9 +307,8 @@ function LoginScreen({ onLogin, onForgot, onBack, onRegister }: {
   const passError = pass === "" ? "Password is required" : pass.length < 8 ? "Password must be at least 8 characters" : !/[A-Z]/.test(pass) ? "Password must include an uppercase letter" : !/\d/.test(pass) ? "Password must include a number" : "";
 
   const handleLogin = () => {
-    if (!isFormValid) return;
-    setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(); }, 1500);
+    if (!isFormValid || loading) return;
+    onLogin({ email: email.trim().toLowerCase(), password: pass });
   };
 
   return (
@@ -342,6 +351,12 @@ function LoginScreen({ onLogin, onForgot, onBack, onRegister }: {
           ))}
         </div>
 
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="flex-1" />
 
         <PrimaryButton label={loading ? "Signing In…" : "Sign In"} onClick={handleLogin} loading={loading} disabled={!isFormValid} />
@@ -355,10 +370,9 @@ function LoginScreen({ onLogin, onForgot, onBack, onRegister }: {
 
 // ── 5. Forgot Password ────────────────────────────────────────────────────────
 
-function ForgotScreen({ onSend, onBack }: { onSend: () => void; onBack: () => void }) {
+function ForgotScreen({ onSend, onBack, loading, error }: { onSend: (email: string) => void; onBack: () => void; loading?: boolean; error?: string }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   // Validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -366,9 +380,9 @@ function ForgotScreen({ onSend, onBack }: { onSend: () => void; onBack: () => vo
   const emailError = email.trim() === "" ? "Email is required" : !emailRegex.test(email) ? "Invalid email format" : "";
 
   const handle = () => {
-    if (!emailValid) return;
-    setLoading(true);
-    setTimeout(() => { setLoading(false); setSent(true); setTimeout(onSend, 1200); }, 1500);
+    if (!emailValid || loading) return;
+    setSent(true);
+    onSend(email.trim().toLowerCase());
   };
 
   return (
@@ -393,10 +407,16 @@ function ForgotScreen({ onSend, onBack }: { onSend: () => void; onBack: () => vo
         <InputField label="Registered Email" placeholder="your@email.com" icon={<Mail size={18} />} type="email" value={email} onChange={setEmail}
           error={emailError} helper={!emailError ? "OTP will be sent to this email" : undefined} />
 
-        {sent && (
+        {sent && !error && (
           <div className="mt-4 p-4 rounded-2xl bg-green-50 border border-green-200 flex items-center gap-3">
             <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
             <p className="text-sm text-green-700 font-medium">OTP sent! Check your inbox.</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+            {error}
           </div>
         )}
 
@@ -409,9 +429,8 @@ function ForgotScreen({ onSend, onBack }: { onSend: () => void; onBack: () => vo
 
 // ── 6. OTP Verification ───────────────────────────────────────────────────────
 
-function OTPScreen({ onVerify, onBack }: { onVerify: () => void; onBack: () => void }) {
+function OTPScreen({ onVerify, onBack, email, loading, error }: { onVerify: (otp: string) => void; onBack: () => void; email?: string; loading?: boolean; error?: string }) {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [loading, setLoading] = useState(false);
   const [resent, setResent] = useState(false);
   const [timer, setTimer] = useState(30);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
@@ -430,7 +449,10 @@ function OTPScreen({ onVerify, onBack }: { onVerify: () => void; onBack: () => v
     if (e.key === "Backspace" && !otp[idx] && idx > 0) refs.current[idx - 1]?.focus();
   };
   const filled = otp.every((d) => d !== "");
-  const handle = () => { setLoading(true); setTimeout(() => { setLoading(false); onVerify(); }, 1500); };
+  const handle = () => {
+    if (!filled || loading) return;
+    onVerify(otp.join(""));
+  };
 
   return (
     <div className="w-full min-h-full flex flex-col bg-[#F8FAFC]">
@@ -441,7 +463,7 @@ function OTPScreen({ onVerify, onBack }: { onVerify: () => void; onBack: () => v
         </div>
         <h2 className="font-black text-xl text-slate-800 text-center">Enter Verification Code</h2>
         <p className="text-slate-500 text-sm mt-2 mb-8 text-center leading-relaxed">
-          We sent a 6-digit code to<br /><span className="font-semibold text-slate-700">aryan.sharma@gmail.com</span>
+          We sent a 6-digit code to<br /><span className="font-semibold text-slate-700">{email || "your registered email"}</span>
         </p>
 
         {/* OTP boxes */}
@@ -487,14 +509,14 @@ function OTPScreen({ onVerify, onBack }: { onVerify: () => void; onBack: () => v
 // ── 5.5 Staff activation steps (reuse OTP + reset UIs, no redesign) ──────────────
 
 function StaffActivateScreen({ onNext, onBack, loading, error }: { onNext: (email: string) => void; onBack: () => void; loading?: boolean; error?: string }) {
-  const [staffId, setStaffId] = useState("");
+  const [email, setEmail] = useState("");
 
-  const valid = staffId.trim().length >= 3;
-  const fieldError = staffId.trim() === "" ? "Staff identifier is required" : staffId.trim().length < 3 ? "Enter a valid identifier" : "";
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const fieldError = email.trim() === "" ? "Email is required" : !valid ? "Enter a valid email address" : "";
 
   const handle = () => {
     if (!valid || loading) return;
-    onNext(staffId.trim());
+    onNext(email.trim().toLowerCase());
   };
 
   return (
@@ -510,18 +532,18 @@ function StaffActivateScreen({ onNext, onBack, loading, error }: { onNext: (emai
           </div>
         </div>
 
-        <h2 className="font-black text-xl text-slate-800">Verify your account</h2>
+        <h2 className="font-black text-xl text-slate-800">Verify your email</h2>
         <p className="text-slate-500 text-sm mt-2 mb-6 leading-relaxed">
-          Enter your staff identifier. We will send a 6-digit OTP to verify the activation.
+          Enter your staff email address. We will send a 6-digit OTP to verify the activation.
         </p>
 
         <InputField
-          label="Staff Identifier"
+          label="Staff Email"
           placeholder="e.g. staff@hostelpaglu.in"
           icon={<Mail size={18} />}
-          type="text"
-          value={staffId}
-          onChange={setStaffId}
+          type="email"
+          value={email}
+          onChange={setEmail}
           error={fieldError ? fieldError : undefined}
           helper={!fieldError ? "OTP will be sent after verification" : undefined}
         />
@@ -764,19 +786,21 @@ function StaffActivationSuccessScreen({ onNext, onBack }: { onNext: () => void; 
   );
 }
 
-function ResetScreen({ onReset, onBack }: { onReset: () => void; onBack: () => void }) {
+function ResetScreen({ onReset, onBack, loading, error }: { onReset: (password: string) => void; onBack: () => void; loading?: boolean; error?: string }) {
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show1, setShow1] = useState(false);
   const [show2, setShow2] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const strength = pass.length === 0 ? 0 : pass.length < 6 ? 1 : pass.length < 10 ? 2 : /[A-Z]/.test(pass) && /\d/.test(pass) ? 4 : 3;
   const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strength];
   const strengthColor = ["", "#EF4444", "#F59E0B", "#10B981", "#2563EB"][strength];
 
   const valid = pass.length >= 8 && pass === confirm;
-  const handle = () => { setLoading(true); setTimeout(() => { setLoading(false); onReset(); }, 1500); };
+  const handle = () => {
+    if (!valid || loading) return;
+    onReset(pass);
+  };
 
   return (
     <div className="w-full min-h-full flex flex-col bg-[#F8FAFC]">
@@ -824,6 +848,12 @@ function ResetScreen({ onReset, onBack }: { onReset: () => void; onBack: () => v
             </div>
           ))}
         </div>
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         <div className="flex-1" />
         <PrimaryButton label="Reset Password" onClick={handle} loading={loading} disabled={!valid} />
@@ -1443,9 +1473,77 @@ export default function AuthFlow({ onAuthComplete }: AuthFlowProps) {
   const [screen, setScreen] = useState<Screen>("splash");
   const [selectedRole, setSelectedRole] = useState<string>("student");
   const [activationEmail, setActivationEmail] = useState("");
-  const [activationToken, setActivationToken] = useState("");
+  const [activationOtp, setActivationOtp] = useState("");
+  const [activationToken, setActivationToken] = useState<string | null>(null);
   const [activationError, setActivationError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
   const nav = (s: Screen) => () => setScreen(s);
+
+  const loginMutation = useMutation({
+    mutationFn: ({ email, password }: { email: string; password: string }) =>
+      apiClient.post("/v1/auth/login", { email, password }).then((response) => response.data),
+    onSuccess: () => {
+      setAuthError(null);
+      onAuthComplete(selectedRole);
+    },
+    onError: (error) => {
+      setAuthError(getErrorMessage(error, "Unable to sign in. Please verify your credentials."));
+    },
+  });
+
+  const forgotPasswordMutation = useMutation({
+    mutationFn: (email: string) =>
+      apiClient.post("/v1/auth/request-otp", { email }).then((response) => response.data),
+    onSuccess: (_data, email) => {
+      setForgotEmail(email);
+      setAuthError(null);
+      setScreen("otp");
+    },
+    onError: (error) => {
+      setAuthError(getErrorMessage(error, "Unable to send the OTP right now."));
+    },
+  });
+
+  const verifyForgotOtpMutation = useMutation({
+    mutationFn: ({ email, otp }: { email: string; otp: string }) =>
+      apiClient.post("/v1/auth/verify-otp", { email, otp }).then((response) => response.data),
+    onSuccess: (_data, { email, otp }) => {
+      setResetEmail(email);
+      setResetOtp(otp);
+      setAuthError(null);
+      setScreen("reset");
+    },
+    onError: (error) => {
+      setAuthError(getErrorMessage(error, "Unable to verify the OTP."));
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ email, otp, password }: { email: string; otp: string; password: string }) =>
+      resetPassword(email, otp, password),
+    onSuccess: () => {
+      setAuthError(null);
+      setScreen("login");
+    },
+    onError: (error) => {
+      setAuthError(getErrorMessage(error, "Unable to complete password reset. Please try again."));
+    },
+  });
+
+  const staffActivationPasswordMutation = useMutation({
+    mutationFn: ({ email, otp, password }: { email: string; otp: string; password: string }) =>
+      resetPassword(email, otp, password),
+    onSuccess: () => {
+      setActivationError(null);
+      setScreen("staff-activation-success");
+    },
+    onError: (error) => {
+      setActivationError(error instanceof Error ? error.message : "Unable to activate the staff account.");
+    },
+  });
 
   const requestOtpMutation = useMutation({
     mutationFn: (email: string) => requestStaffActivationOtp(email),
@@ -1456,17 +1554,6 @@ export default function AuthFlow({ onAuthComplete }: AuthFlowProps) {
     },
     onError: (error) => {
       setActivationError(error instanceof Error ? error.message : "Unable to send the activation OTP.");
-    },
-  });
-
-  const verifyOtpMutation = useMutation({
-    mutationFn: ({ email, otp }: { email: string; otp: string }) => verifyStaffActivationOtp(email, otp),
-    onSuccess: () => {
-      setActivationError(null);
-      setScreen("staff-create-password");
-    },
-    onError: (error) => {
-      setActivationError(error instanceof Error ? error.message : "Unable to verify the activation OTP.");
     },
   });
 
@@ -1489,8 +1576,8 @@ export default function AuthFlow({ onAuthComplete }: AuthFlowProps) {
       setActivationToken(token);
       if (email) {
         setActivationEmail(email);
-        setScreen("staff-otp");
       }
+      setScreen("staff-create-password");
     }
   }, []);
 
@@ -1499,34 +1586,51 @@ export default function AuthFlow({ onAuthComplete }: AuthFlowProps) {
     setScreen("login");
   };
 
-  const handleLoginSuccess = () => {
-    onAuthComplete(selectedRole);
-  };
-
   const renderScreen = () => {
     switch (screen) {
       case "splash":   return <SplashScreen onNext={nav("welcome")} />;
       case "welcome":  return <WelcomeScreen onNext={nav("role")} onLogin={nav("login")} />;
       case "role":     return <RoleScreen onSelect={handleRoleSelect} />;
-      case "login":    return <LoginScreen onLogin={handleLoginSuccess} onForgot={nav("forgot")} onBack={nav("welcome")} onRegister={nav("reg1")} />;
-      case "forgot":   return <ForgotScreen onSend={nav("otp")} onBack={nav("login")} />;
-      case "otp":      return <OTPScreen onVerify={nav("reset")} onBack={nav("forgot")} />;
-      case "reset":    return <ResetScreen onReset={nav("login")} onBack={nav("otp")} />;
+      case "login":    return <LoginScreen onLogin={(payload) => loginMutation.mutate(payload)} onForgot={nav("forgot")} onBack={nav("welcome")} onRegister={nav("reg1")} loading={loginMutation.isPending} error={authError ?? undefined} />;
+      case "forgot":   return <ForgotScreen onSend={(email) => forgotPasswordMutation.mutate(email)} onBack={nav("login")} loading={forgotPasswordMutation.isPending} error={authError ?? undefined} />;
+      case "otp":      return <OTPScreen onVerify={(otp) => verifyForgotOtpMutation.mutate({ email: forgotEmail, otp })} onBack={nav("forgot")} email={forgotEmail} loading={verifyForgotOtpMutation.isPending} error={authError ?? undefined} />;
+      case "reset":    return <ResetScreen onReset={(password) => resetPasswordMutation.mutate({ email: resetEmail, otp: resetOtp, password })} onBack={nav("otp")} loading={resetPasswordMutation.isPending} error={authError ?? undefined} />;
       case "staff-activate":
         return <StaffActivateScreen onNext={(email) => requestOtpMutation.mutate(email)} onBack={nav("login")} loading={requestOtpMutation.isPending} error={activationError ?? undefined} />;
       case "staff-otp":
         return (
           <StaffOTPScreen
-            onVerify={(otp) => verifyOtpMutation.mutate({ email: activationEmail, otp })}
+            onVerify={(otp) => {
+              setActivationOtp(otp);
+              setActivationError(null);
+              setScreen("staff-create-password");
+            }}
             onBack={nav("staff-activate")}
             onResend={() => requestOtpMutation.mutate(activationEmail)}
             email={activationEmail}
-            loading={verifyOtpMutation.isPending}
+            loading={requestOtpMutation.isPending}
             error={activationError ?? undefined}
           />
         );
       case "staff-create-password":
-        return <StaffCreatePasswordScreen onCreate={(password) => activateAccountMutation.mutate({ token: activationToken, password })} onBack={nav("staff-otp")} loading={activateAccountMutation.isPending} error={activationError ?? undefined} />;
+        return (
+          <StaffCreatePasswordScreen
+            onCreate={(password) => {
+              if (activationToken) {
+                activateAccountMutation.mutate({ token: activationToken, password });
+              } else {
+                staffActivationPasswordMutation.mutate({
+                  email: activationEmail,
+                  otp: activationOtp,
+                  password,
+                });
+              }
+            }}
+            onBack={nav("staff-otp")}
+            loading={activationToken ? activateAccountMutation.isPending : staffActivationPasswordMutation.isPending}
+            error={activationError ?? undefined}
+          />
+        );
       case "staff-activation-success":
         return <StaffActivationSuccessScreen onNext={nav("login")} onBack={nav("staff-create-password")} />;
       case "reg1":     return <Reg1 onNext={nav("reg2")} onBack={nav("login")} />;

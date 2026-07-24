@@ -484,6 +484,10 @@ export async function activateStaffAccountWithToken(token: string, password: str
   return apiPost<{ id: string; email: string }>("v1/admin/activate-account", { token, password });
 }
 
+export async function resetPassword(email: string, otp: string, password: string): Promise<{ message: string }> {
+  return apiPost<{ message: string }>("v1/auth/reset-password", { email, otp, password });
+}
+
 export async function getParentVisitorRequests(): Promise<VisitorRequest[]> {
   return apiGet<VisitorRequest[]>("v1/visitor/student");
 }
