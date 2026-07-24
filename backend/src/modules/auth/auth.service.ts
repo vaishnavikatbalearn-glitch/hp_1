@@ -59,14 +59,14 @@ export async function requestOtp(email: string): Promise<{ message: string }> {
   const normalizedEmail = email.toLowerCase();
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
-    select: { id: true, isActive: true },
+    select: { id: true, accountStatus: true },
   });
 
   if (!user) {
     return { message: 'If an account exists, an OTP has been sent.' };
   }
 
-  if (!user.isActive) {
+  if (user.accountStatus === 'SUSPENDED') {
     throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
   }
 
@@ -102,7 +102,7 @@ async function verifyOtpForUser(userId: string, otp: string): Promise<void> {
     where: { id: userId },
     select: {
       id: true,
-      isActive: true,
+      accountStatus: true,
       otpHash: true,
       otpAttempts: true,
       otpExpiry: true,
@@ -113,7 +113,7 @@ async function verifyOtpForUser(userId: string, otp: string): Promise<void> {
     throw AppError.notFound('User');
   }
 
-  if (!user.isActive) {
+  if (user.accountStatus === 'SUSPENDED') {
     throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
   }
 
@@ -181,6 +181,20 @@ export async function resetUserPassword(userId: string, password: string, otp?: 
   return { id: updated.id, email: updated.email };
 }
 
+export async function resetPasswordByEmail(email: string, password: string, otp?: string): Promise<{ id: string; email: string }> {
+  const normalizedEmail = email.toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true },
+  });
+
+  if (!user) {
+    throw AppError.notFound('User');
+  }
+
+  return resetUserPassword(user.id, password, otp);
+}
+
 export async function verifyOtp(email: string, otp: string): Promise<AuthSessionPayload> {
   const normalizedEmail = email.toLowerCase();
 
@@ -191,7 +205,7 @@ export async function verifyOtp(email: string, otp: string): Promise<AuthSession
       fullName: true,
       email: true,
       role: true,
-      isActive: true,
+      accountStatus: true,
       otpHash: true,
       otpAttempts: true,
       otpExpiry: true,
@@ -202,7 +216,7 @@ export async function verifyOtp(email: string, otp: string): Promise<AuthSession
     throw AppError.unauthorized('Invalid OTP request', ErrorCode.INVALID_CREDENTIALS);
   }
 
-  if (!user.isActive) {
+  if (user.accountStatus === 'SUSPENDED') {
     throw AppError.unauthorized('Account disabled', ErrorCode.ACCOUNT_DISABLED);
   }
 

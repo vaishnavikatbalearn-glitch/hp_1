@@ -28,6 +28,12 @@ export const verifyOtpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
 });
 
+export const resetPasswordSchema = z.object({
+  email: z.string().email('Invalid email'),
+  otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
 export const activateAccountSchema = z.object({
   token: z.string().trim().min(1, 'Activation token is required'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -38,4 +44,5 @@ export type LoginRequestBody = z.infer<typeof loginSchema>;
 export type RequestOtpBody = z.infer<typeof requestOtpSchema>;
 export type ResendOtpBody = z.infer<typeof resendOtpSchema>;
 export type VerifyOtpBody = z.infer<typeof verifyOtpSchema>;
+export type ResetPasswordBody = z.infer<typeof resetPasswordSchema>;
 export type ActivateAccountBody = z.infer<typeof activateAccountSchema>;

@@ -23,7 +23,7 @@ Production verification across authentication, authorization, core modules, API 
 | Frontend build | Pass | `npm run build` in frontend completed successfully. |
 | Backend startup | Pass | Backend started successfully and responded on `/api/v1/health`. |
 | TypeScript | Pass | `npm run typecheck` completed successfully. |
-| ESLint | Partial / blocked | ESLint execution is currently blocked by a missing package: `@eslint/js` from `eslint.config.mjs`. |
+| ESLint | Partial / failing | ESLint now runs, but the backend still reports existing lint issues across configuration, middleware, and service files (94 errors, 25 warnings). |
 
 ## Verification Details
 

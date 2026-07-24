@@ -3,8 +3,8 @@ import { ApiResponse } from '../../utils/response';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { AppError, ErrorCode } from '../../types/errors';
 import { env } from '../../config/env';
-import { registerUser, loginUser, refreshSession, revokeRefreshToken, getAuthUserById, requestOtp, resendOtp, verifyOtp } from './auth.service';
-import type { RegisterRequestBody, LoginRequestBody, RequestOtpBody, ResendOtpBody, VerifyOtpBody } from './auth.validation';
+import { registerUser, loginUser, refreshSession, revokeRefreshToken, getAuthUserById, requestOtp, resendOtp, verifyOtp, resetPasswordByEmail } from './auth.service';
+import type { RegisterRequestBody, LoginRequestBody, RequestOtpBody, ResendOtpBody, VerifyOtpBody, ResetPasswordBody } from './auth.validation';
 
 function setRefreshCookie(res: Response, token: string) {
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -52,6 +52,12 @@ export const verifyOtpController = asyncHandler(async (req: Request, res: Respon
   const session = await verifyOtp(body.email, body.otp);
   setRefreshCookie(res, session.refreshToken);
   return ApiResponse.ok(res, { accessToken: session.accessToken, user: session.user }, 'OTP verified successfully');
+});
+
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const body = req.body as ResetPasswordBody;
+  await resetPasswordByEmail(body.email, body.password, body.otp);
+  return ApiResponse.ok(res, { message: 'Password reset successfully' });
 });
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {

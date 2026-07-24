@@ -154,22 +154,62 @@ export async function updateStaffAccount(id: string, payload: UpdateStaffBody) {
     throw AppError.notFound('Staff account');
   }
 
-  const data: Record<string, unknown> = {};
-  if (payload.fullName !== undefined) data.fullName = payload.fullName;
-  if (payload.email !== undefined) data.email = payload.email.toLowerCase();
-  if (payload.phone !== undefined) data.phone = payload.phone;
-  if (payload.role !== undefined) data.role = payload.role as unknown as Role;
+  if (payload.email !== undefined) {
+    const existingEmail = await prisma.user.findFirst({
+      where: {
+        email: payload.email.toLowerCase(),
+        id: { not: id },
+      },
+    });
+    if (existingEmail) {
+      throw AppError.conflict('Email is already in use', ErrorCode.CONFLICT);
+    }
+  }
+
+  if (payload.phone !== undefined) {
+    const existingPhone = await prisma.user.findFirst({
+      where: {
+        phone: payload.phone,
+        id: { not: id },
+      },
+    });
+    if (existingPhone) {
+      throw AppError.conflict('Phone number is already in use', ErrorCode.CONFLICT);
+    }
+  }
+
+  const userData: Record<string, unknown> = {};
+  const staffData: Record<string, unknown> = {};
+
+  if (payload.fullName !== undefined) {
+    userData.fullName = payload.fullName;
+    const [firstName, ...remaining] = payload.fullName.trim().split(' ');
+    staffData.firstName = firstName;
+    staffData.lastName = remaining.join(' ') || 'Staff';
+  }
+  if (payload.email !== undefined) userData.email = payload.email.toLowerCase();
+  if (payload.phone !== undefined) {
+    userData.phone = payload.phone;
+    staffData.phone = payload.phone;
+  }
+  if (payload.role !== undefined) {
+    userData.role = payload.role as unknown as Role;
+    staffData.designation = payload.role;
+  }
+  if (payload.hostelId !== undefined) {
+    staffData.hostelId = payload.hostelId;
+  }
 
   const updatedUser = await prisma.user.update({
     where: { id },
-    data,
+    data: userData,
     select: STAFF_SELECT,
   });
 
-  if (payload.hostelId !== undefined) {
+  if (Object.keys(staffData).length > 0) {
     await prisma.staff.update({
       where: { userId: id },
-      data: { hostelId: payload.hostelId },
+      data: staffData,
     });
   }
 
@@ -188,8 +228,16 @@ export async function updateStaffStatus(id: string, payload: UpdateStaffStatusBo
 
   const updated = await prisma.user.update({
     where: { id },
-    data: { accountStatus: payload.status as any },
+    data: {
+      accountStatus: payload.status as any,
+      isActive: payload.status === 'ACTIVE',
+    },
     select: STAFF_SELECT,
+  });
+
+  await prisma.staff.update({
+    where: { userId: id },
+    data: { isActive: payload.status === 'ACTIVE' },
   });
 
   return mapStaffPayload(updated);
@@ -209,6 +257,11 @@ export async function disableStaffAccount(id: string) {
     where: { id },
     data: { isActive: false, accountStatus: 'SUSPENDED' as any },
     select: STAFF_SELECT,
+  });
+
+  await prisma.staff.update({
+    where: { userId: id },
+    data: { isActive: false },
   });
 
   return mapStaffPayload(updated);

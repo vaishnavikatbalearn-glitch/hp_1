@@ -24,6 +24,10 @@ import {
   getPendingFees,
   payFee,
   apiGet,
+  getStudents,
+  getRooms,
+  getComplaints,
+  getLaundryRequests,
   createStaffAccount as createStaffAccountRequest,
   disableStaffAccount as disableStaffAccountRequest,
   enableStaffAccount as enableStaffAccountRequest,
@@ -486,6 +490,84 @@ function BottomNav({ tabs, active, onChange }: {
 // ─── SUPER ADMIN ──────────────────────────────────────────────
 
 function SuperAdminDashboard() {
+  const [dashboardStats, setDashboardStats] = useState({
+    students: 400,
+    attendance: 91,
+    occupancy: 85.5,
+    openComplaints: 8,
+    laundryPending: 24,
+    feesCollected: 4400000,
+    pendingFees: 600000,
+    wardens: 8,
+    trustees: 4,
+    laundryStaff: 6,
+  });
+  const [attendanceChartPointsState, setAttendanceChartPointsState] = useState<AttendanceChartPoint[]>(attendanceChartData as any);
+  const [feeChartPointsState, setFeeChartPointsState] = useState<FeeChartPoint[]>(feeChartData as any);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStats = async () => {
+      try {
+        const [staffAccounts, students, rooms, pendingFees, attendanceSummary, complaints, laundryRequests] = await Promise.all([
+          listStaffAccounts(),
+          getStudents(),
+          getRooms(),
+          getPendingFees(),
+          apiGet<{ monthly?: { percentage?: number; total?: number }; overallPercentage?: number; daily?: Array<{ date: string; present: number; absent: number }> }>("v1/attendance/summary?month=6&year=2025"),
+          getComplaints(),
+          getLaundryRequests(),
+        ]);
+
+        if (!isMounted) return;
+
+        const studentCount = students.length;
+        const occupancy = rooms.reduce((acc, room) => acc + Number(room.currentOccupancy ?? 0), 0);
+        const capacity = rooms.reduce((acc, room) => acc + Number(room.capacity ?? 0), 0);
+        const occupancyPercent = capacity > 0 ? Math.min(100, Math.max(0, Math.round((occupancy / capacity) * 100))) : 0;
+        const attendancePercentage = attendanceSummary?.monthly?.percentage ?? attendanceSummary?.overallPercentage ?? 91;
+        const collected = pendingFees.reduce((sum, fee) => sum + Number(fee.paidAmount ?? 0), 0);
+        const pending = pendingFees.reduce((sum, fee) => sum + Math.max(0, Number(fee.amount ?? 0) - Number(fee.paidAmount ?? 0)), 0);
+
+        const openComplaints = complaints.filter((complaint) => {
+          const status = normalizeStatus(complaint.status);
+          return status === "OPEN" || status === "PENDING" || status === "NEW";
+        }).length;
+        const laundryPending = laundryRequests.filter((request) => {
+          const status = normalizeStatus(request.status);
+          return status !== "DELIVERED" && status !== "READY";
+        }).length;
+        const wardens = staffAccounts.filter((account) => String(account.role).toUpperCase() === "WARDEN").length;
+        const trustees = staffAccounts.filter((account) => String(account.role).toUpperCase() === "TRUSTEE").length;
+        const laundryStaff = staffAccounts.filter((account) => String(account.role).toUpperCase() === "LAUNDRY_STAFF").length;
+
+        setDashboardStats({
+          students: studentCount,
+          attendance: attendancePercentage,
+          occupancy: occupancyPercent,
+          openComplaints,
+          laundryPending,
+          feesCollected: collected,
+          pendingFees: pending,
+          wardens,
+          trustees,
+          laundryStaff,
+        });
+
+        setAttendanceChartPointsState(buildAttendanceChartData(attendanceSummary, attendancePercentage));
+        setFeeChartPointsState(buildFeeChartData(pendingFees));
+      } catch {
+        // preserve fallback data on failure
+      }
+    };
+
+    void loadStats();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 pb-20">
       <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 px-4 pt-4 pb-8">
@@ -504,7 +586,7 @@ function SuperAdminDashboard() {
           </div>
         </div>
         <div className="bg-white/10 rounded-2xl p-3 grid grid-cols-3 gap-2 text-center backdrop-blur-sm">
-          {[["400", "Students"], ["85.5%", "Occupancy"], ["91%", "Attendance"]].map(([v, l]) => (
+          {[[dashboardStats.students, "Students"], [`${dashboardStats.occupancy}%`, "Occupancy"], [`${dashboardStats.attendance}%`, "Attendance"]].map(([v, l]) => (
             <div key={l}>
               <div className="text-white font-extrabold text-xl">{v}</div>
               <div className="text-blue-200 text-xs">{l}</div>
@@ -515,17 +597,17 @@ function SuperAdminDashboard() {
 
       <div className="px-4 -mt-4">
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <StatCard icon={<Users className="w-4 h-4" />} label="Total Students" value="400" color="blue" trend={{ value: "+12", up: true }} />
-          <StatCard icon={<Shield className="w-4 h-4" />} label="Wardens" value="8" color="purple" />
+          <StatCard icon={<Users className="w-4 h-4" />} label="Total Students" value={String(dashboardStats.students)} color="blue" trend={{ value: "+12", up: true }} />
+          <StatCard icon={<Shield className="w-4 h-4" />} label="Wardens" value={String(dashboardStats.wardens)} color="purple" />
           <StatCard icon={<User className="w-4 h-4" />} label="Parents Registered" value="248" color="green" />
-          <StatCard icon={<Award className="w-4 h-4" />} label="Trustees" value="4" color="orange" />
-          <StatCard icon={<Truck className="w-4 h-4" />} label="Laundry Staff" value="6" color="cyan" />
-          <StatCard icon={<DollarSign className="w-4 h-4" />} label="Fee Collected" value="₹44L" color="green" sub="This month" trend={{ value: "+8%", up: true }} />
+          <StatCard icon={<Award className="w-4 h-4" />} label="Trustees" value={String(dashboardStats.trustees)} color="orange" />
+          <StatCard icon={<Truck className="w-4 h-4" />} label="Laundry Staff" value={String(dashboardStats.laundryStaff)} color="cyan" />
+          <StatCard icon={<DollarSign className="w-4 h-4" />} label="Fee Collected" value={formatCurrencyLabel(dashboardStats.feesCollected)} color="green" sub="This month" trend={{ value: "+8%", up: true }} />
         </div>
 
         <ChartCard title="Attendance Trend (%)">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={attendanceChartData}>
+            <AreaChart data={attendanceChartPointsState}>
               <defs>
                 <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#1D4ED8" stopOpacity={0.2} />
@@ -542,7 +624,7 @@ function SuperAdminDashboard() {
 
         <ChartCard title="Fee Collection (₹ Thousands)">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={feeChartData} barGap={4}>
+            <BarChart data={feeChartPointsState} barGap={4}>
               <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 4px 24px rgba(0,0,0,0.1)", fontSize: 12 }} />
@@ -1227,6 +1309,9 @@ function AdminDashboard() {
     leavePending: 12,
     leaveApproved: 28,
     leaveRejected: 5,
+    wardens: 8,
+    trustees: 4,
+    laundryStaff: 6,
   });
   const [attendanceChartPoints, setAttendanceChartPoints] = useState<AttendanceChartPoint[]>([
     { month: "Today", present: 91, absent: 9, target: 90 },
@@ -1261,11 +1346,14 @@ function AdminDashboard() {
 
     const loadDashboardStats = async () => {
       try {
-        const [pendingFees, attendanceSummary, complaints, laundryRequests, leaveRequests] = await Promise.all([
+        const [staffAccounts, students, rooms, pendingFees, attendanceSummary, complaints, laundryRequests, leaveRequests] = await Promise.all([
+          listStaffAccounts(),
+          getStudents(),
+          getRooms(),
           getPendingFees(),
-          apiGet<{ monthly?: { percentage?: number; total?: number }; overallPercentage?: number }>("v1/attendance/summary?month=6&year=2025"),
-          apiGet<Array<{ status?: string | null; createdAt?: string | null; resolvedAt?: string | null }>>("v1/complaints"),
-          apiGet<Array<{ status?: string | null; createdAt?: string | null }>>("v1/laundry"),
+          apiGet<{ monthly?: { percentage?: number; total?: number }; overallPercentage?: number; daily?: Array<{ date: string; present: number; absent: number }> }>("v1/attendance/summary?month=6&year=2025"),
+          getComplaints(),
+          getLaundryRequests(),
           apiGet<Array<{ status?: string | null; createdAt?: string | null }>>("v1/leave/warden"),
         ]);
 
@@ -1274,10 +1362,15 @@ function AdminDashboard() {
         const totalCollected = pendingFees.reduce((sum, fee) => sum + Number(fee.paidAmount ?? 0), 0);
         const totalPending = pendingFees.reduce((sum, fee) => sum + Math.max(0, Number(fee.amount ?? 0) - Number(fee.paidAmount ?? 0)), 0);
         const attendancePercentage = attendanceSummary?.monthly?.percentage ?? attendanceSummary?.overallPercentage ?? 91;
-        const studentCount = attendanceSummary?.monthly?.total ?? 342;
-        const occupancy = Math.min(100, Math.max(70, Math.round((studentCount / 400) * 100)));
+        const studentCount = students.length;
+        const occupancy = rooms.reduce((acc, room) => acc + Number(room.currentOccupancy ?? 0), 0);
+        const capacity = rooms.reduce((acc, room) => acc + Number(room.capacity ?? 0), 0);
+        const occupancyPercent = capacity > 0 ? Math.min(100, Math.max(0, Math.round((occupancy / capacity) * 100))) : 0;
 
-        const openComplaints = complaints.filter((complaint) => normalizeStatus(complaint.status) === "OPEN").length;
+        const openComplaints = complaints.filter((complaint) => {
+          const status = normalizeStatus(complaint.status);
+          return status === "OPEN" || status === "PENDING" || status === "NEW";
+        }).length;
         const laundryPending = laundryRequests.filter((request) => {
           const status = normalizeStatus(request.status);
           return status !== "DELIVERED" && status !== "READY";
@@ -1286,11 +1379,14 @@ function AdminDashboard() {
         const leavePending = leaveRequests.filter((request) => normalizeStatus(request.status) === "PENDING").length;
         const leaveApproved = leaveRequests.filter((request) => normalizeStatus(request.status) === "APPROVED").length;
         const leaveRejected = leaveRequests.filter((request) => normalizeStatus(request.status) === "REJECTED").length;
+        const wardens = staffAccounts.filter((account) => String(account.role).toUpperCase() === "WARDEN").length;
+        const trustees = staffAccounts.filter((account) => String(account.role).toUpperCase() === "TRUSTEE").length;
+        const laundryStaff = staffAccounts.filter((account) => String(account.role).toUpperCase() === "LAUNDRY_STAFF").length;
 
         setDashboardStats({
           students: studentCount,
           attendance: attendancePercentage,
-          occupancy,
+          occupancy: occupancyPercent,
           openComplaints,
           laundryPending,
           feesCollected: totalCollected,
@@ -1298,6 +1394,9 @@ function AdminDashboard() {
           leavePending,
           leaveApproved,
           leaveRejected,
+          wardens,
+          trustees,
+          laundryStaff,
         });
         setAttendanceChartPoints(buildAttendanceChartData(attendanceSummary, attendancePercentage));
         setComplaintChartPoints(buildComplaintChartData(complaints));
