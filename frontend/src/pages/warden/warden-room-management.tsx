@@ -22,6 +22,7 @@ export function WardenRoomManagement() {
     number: room.roomNumber,
     capacity: room.capacity,
     occupied: room.currentOccupancy,
+    vacant: room.capacity - room.currentOccupancy,
     status: room.currentOccupancy >= room.capacity ? 'Full' : 'Available',
   }));
 

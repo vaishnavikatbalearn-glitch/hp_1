@@ -1,14 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Search, Filter, Plus, UserCheck, UserX, Clock } from 'lucide-react';
+import { ArrowLeft, Search, Plus, UserCheck, UserX, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getStudents } from '../../services/api';
-import { apiClient } from '../../auth-integration/src/api/axiosInstance';
 
 type StudentStatus = 'Present' | 'Absent' | 'On Leave' | 'Late Entry';
 
@@ -27,75 +26,51 @@ interface StudentWithStatus {
 export function WardenStudentManagement() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [roomFilter, setRoomFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 12;
 
   const studentsQuery = useQuery({
-    queryKey: ['students-list'],
-    queryFn: () => getStudents(),
-  });
-
-  const attendanceQuery = useQuery({
-    queryKey: ['attendance-today'],
-    queryFn: async () => {
-      const response = await apiClient.get('/v1/attendance/today');
-      return response.data?.data || [];
-    },
-  });
-
-  const roomAllocationsQuery = useQuery({
-    queryKey: ['room-allocations'],
-    queryFn: async () => {
-      const response = await apiClient.get('/v1/rooms');
-      return response.data?.data || [];
-    },
+    queryKey: ['students-list', searchQuery, statusFilter, roomFilter],
+    queryFn: () =>
+      getStudents({
+        search: searchQuery.trim() || undefined,
+        status: statusFilter !== 'ALL' ? statusFilter : undefined,
+        room: roomFilter.trim() || undefined,
+      }),
+    keepPreviousData: true,
   });
 
   const students = useMemo<StudentWithStatus[]>(() => {
     if (!studentsQuery.data) return [];
 
-    const attendanceMap = new Map((attendanceQuery.data || []).map((a: any) => [
-      a.studentId,
-      a.status,
-    ]));
-
-    const roomMap = new Map(
-      (roomAllocationsQuery.data || [])
-        .flatMap((room: any) => room.allocations || [])
-        .map((alloc: any) => [alloc.studentId, alloc.roomNumber])
-    );
-
-    return studentsQuery.data.map((student: any) => {
-      const attendanceStatus = attendanceMap.get(student.id);
-      let status: StudentStatus = 'Present';
-      
-      if (attendanceStatus === 'ABSENT') {
-        status = 'Absent';
-      } else if (attendanceStatus === 'ON_LEAVE') {
-        status = 'On Leave';
-      } else if (attendanceStatus === 'LATE') {
-        status = 'Late Entry';
-      }
-
-      return {
-        id: student.id,
-        firstName: student.firstName || '',
-        lastName: student.lastName || '',
-        enrollmentNumber: student.enrollmentNumber,
-        course: `${student.branch} ${student.year}`,
-        branch: student.branch,
-        photoUrl: student.photoUrl,
-        status,
-        roomNumber: roomMap.get(student.id),
-      };
-    });
-  }, [studentsQuery.data, attendanceQuery.data, roomAllocationsQuery.data]);
+    return studentsQuery.data.map((student) => ({
+      id: student.id,
+      firstName: student.firstName || '',
+      lastName: student.lastName || '',
+      enrollmentNumber: student.enrollmentNumber,
+      course: `${student.branch} ${student.year}`,
+      branch: student.branch,
+      photoUrl: student.photoUrl,
+      status: student.isActive ? 'Present' : 'Absent',
+      roomNumber: student.roomNumber || undefined,
+    }));
+  }, [studentsQuery.data]);
 
   const filteredStudents = useMemo(() => {
-    return students.filter(
-      (student) =>
-        student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.enrollmentNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const normalizedSearch = searchQuery.toLowerCase().trim();
+
+    return students.filter((student) => {
+      const matchesSearch =
+        student.firstName.toLowerCase().includes(normalizedSearch) ||
+        student.lastName.toLowerCase().includes(normalizedSearch) ||
+        student.enrollmentNumber.toLowerCase().includes(normalizedSearch) ||
+        student.branch.toLowerCase().includes(normalizedSearch) ||
+        student.course.toLowerCase().includes(normalizedSearch);
+
+      return matchesSearch;
+    });
   }, [students, searchQuery]);
 
   const stats = useMemo(() => {
@@ -135,8 +110,9 @@ export function WardenStudentManagement() {
     }
   };
 
-  const displayStudents = studentsQuery.isPending ? [] : filteredStudents;
-  const isLoading = studentsQuery.isPending || attendanceQuery.isPending;
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+  const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const isLoading = studentsQuery.isPending;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -154,19 +130,43 @@ export function WardenStudentManagement() {
           </div>
 
           {/* Search & Filter */}
-          <div className="flex space-x-2">
-            <div className="flex-1 relative">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60" size={18} />
               <Input
                 placeholder="Search students..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
                 className="pl-10 bg-white/20 border-white/30 text-white placeholder:text-white/60 backdrop-blur-sm"
               />
             </div>
-            <Button className="bg-white/20 hover:bg-white/30 border-white/30 backdrop-blur-sm">
-              <Filter className="text-white" size={18} />
-            </Button>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE');
+                  setPage(1);
+                }}
+                className="h-11 rounded-2xl border border-white/30 bg-white/15 px-3 text-sm text-white outline-none focus:border-white"
+              >
+                <option value="ALL">All status</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+              <Input
+                placeholder="Filter room"
+                value={roomFilter}
+                onChange={(e) => {
+                  setRoomFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="bg-white/20 border-white/30 text-white placeholder:text-white/60 backdrop-blur-sm"
+              />
+            </div>
           </div>
         </div>
 
@@ -215,16 +215,16 @@ export function WardenStudentManagement() {
                     Loading students...
                   </div>
                 </Card>
-              ) : displayStudents.length === 0 ? (
+              ) : paginatedStudents.length === 0 ? (
                 <Card className="bg-card border-border">
                   <div className="p-4 text-center text-muted-foreground">
                     No students found
                   </div>
                 </Card>
               ) : (
-                displayStudents.map((student) => (
-                  <Card 
-                    key={student.id} 
+                paginatedStudents.map((student) => (
+                  <Card
+                    key={student.id}
                     className="bg-card border-border cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => navigate(`/warden/students/${student.id}`)}
                   >
@@ -256,6 +256,28 @@ export function WardenStudentManagement() {
                   </Card>
                 ))
               )}
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between gap-3 text-sm text-slate-600 px-6">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={page >= totalPages}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                Next
+              </Button>
             </div>
           </div>
         </div>

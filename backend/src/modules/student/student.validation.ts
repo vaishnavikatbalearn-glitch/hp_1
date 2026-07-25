@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
+export const studentDocumentTypes = ['studentPhoto', 'parentPhoto', 'aadhaar', 'tenthMarksheet', 'twelfthMarksheet'] as const;
+
 export const createStudentSchema = z.object({
   userId: z.string().uuid('Invalid user ID'),
   hostelId: z.string().uuid('Invalid hostel ID'),
-  enrollmentNumber: z.string().min(1, 'Enrollment number is required'),
+  enrollmentNumber: z.string().min(1, 'Enrollment number is required').optional(),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   gender: z.string().min(1, 'Gender is required'),
@@ -31,6 +33,29 @@ export const studentIdParam = z.object({
   id: z.string().uuid('Invalid student ID'),
 });
 
+export const studentIdWithParentIdParam = studentIdParam.extend({
+  parentId: z.string().uuid('Invalid parent ID'),
+});
+
+export const studentParentLinkSchema = z.object({
+  parentId: z.string().uuid('Invalid parent ID'),
+  isPrimary: z.boolean().optional(),
+});
+
+export const studentParentUpdateSchema = z.object({
+  parentId: z.string().uuid('Invalid parent ID'),
+  newParentId: z.string().uuid('Invalid parent ID').optional(),
+  isPrimary: z.boolean().optional(),
+});
+
+export const studentDocumentUploadSchema = z.object({
+  documentType: z.enum(studentDocumentTypes),
+});
+
 export type CreateStudentBody = z.infer<typeof createStudentSchema>;
 export type UpdateStudentBody = z.infer<typeof updateStudentSchema>;
 export type StudentIdParams = z.infer<typeof studentIdParam>;
+export type StudentIdWithParentIdParams = z.infer<typeof studentIdWithParentIdParam>;
+export type StudentParentLinkBody = z.infer<typeof studentParentLinkSchema>;
+export type StudentParentUpdateBody = z.infer<typeof studentParentUpdateSchema>;
+export type StudentDocumentUploadBody = z.infer<typeof studentDocumentUploadSchema>;

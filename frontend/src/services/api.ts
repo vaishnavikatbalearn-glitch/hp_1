@@ -169,6 +169,48 @@ export interface StudentRecord {
   updatedAt: string;
 }
 
+export interface ParentRecord {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  alternatePhone?: string | null;
+  email?: string | null;
+  relation: string;
+  address?: string | null;
+  photoUrl?: string | null;
+  isVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentParentRelation {
+  id: string;
+  studentId: string;
+  parentId: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+  parent: ParentRecord;
+}
+
+export interface LinkStudentParentPayload {
+  parentId: string;
+  isPrimary?: boolean;
+}
+
+export interface UpdateStudentParentPayload {
+  parentId: string;
+  newParentId?: string;
+  isPrimary?: boolean;
+}
+
+export type CreateStudentPayload = Omit<
+  StudentRecord,
+  'id' | 'userId' | 'createdAt' | 'updatedAt'
+>;
+
 export interface RoomRecord {
   id: string;
   roomNumber: string;
@@ -506,18 +548,70 @@ export async function rejectVisitorRequest(id: string): Promise<VisitorRequest> 
 
 // ─── Student Management ───────────────────────────────────────────────────────
 
-export async function getStudents(): Promise<StudentRecord[]> {
-  return apiGet<StudentRecord[]>('v1/student');
+export async function getStudents(params?: { search?: string; enrollment?: string; hostelId?: string; room?: string; status?: string; }): Promise<StudentRecord[]> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.append('search', params.search);
+  if (params?.enrollment) qs.append('enrollment', params.enrollment);
+  if (params?.hostelId) qs.append('hostelId', params.hostelId);
+  if (params?.room) qs.append('room', params.room);
+  if (params?.status) qs.append('status', params.status);
+  const path = qs.toString() ? `v1/student?${qs.toString()}` : 'v1/student';
+  return apiGet<StudentRecord[]>(path);
 }
 
 export async function getStudentById(id: string): Promise<StudentRecord> {
   return apiGet<StudentRecord>(`v1/student/${id}`);
 }
 
+export async function createStudent(payload: CreateStudentPayload): Promise<StudentRecord> {
+  return apiPost<StudentRecord>('v1/student', payload);
+}
+
+export async function updateStudent(id: string, payload: Partial<CreateStudentPayload>): Promise<StudentRecord> {
+  return apiPatch<StudentRecord>(`v1/student/${id}`, payload);
+}
+
+export async function deleteStudent(id: string): Promise<StudentRecord> {
+  return apiDelete<StudentRecord>(`v1/student/${id}`);
+}
+
+export async function getStudentParents(studentId: string): Promise<StudentParentRelation[]> {
+  return apiGet<StudentParentRelation[]>(`v1/student/${studentId}/parents`);
+}
+
+export async function linkStudentParent(studentId: string, payload: LinkStudentParentPayload): Promise<StudentParentRelation> {
+  return apiPost<StudentParentRelation>(`v1/student/${studentId}/parent`, payload);
+}
+
+export async function updateStudentParentLink(studentId: string, payload: UpdateStudentParentPayload): Promise<StudentParentRelation> {
+  return apiPatch<StudentParentRelation>(`v1/student/${studentId}/parent`, payload);
+}
+
+export async function unlinkStudentParent(studentId: string, parentId: string): Promise<{ success: boolean }> {
+  return apiDelete<{ success: boolean }>(`v1/student/${studentId}/parent/${parentId}`);
+}
+
 // ─── Room Management ─────────────────────────────────────────────────────────
+
+export interface RoomAllocationRecord {
+  id: string;
+  studentId: string;
+  roomId: string;
+  status: string;
+  allocatedAt: string;
+  vacatedAt?: string | null;
+}
 
 export async function getRooms(): Promise<RoomRecord[]> {
   return apiGet<RoomRecord[]>('v1/rooms');
+}
+
+export async function assignRoom(studentId: string, roomId: string): Promise<RoomAllocationRecord> {
+  return apiPost<RoomAllocationRecord>('v1/rooms/allocate', { studentId, roomId });
+}
+
+export async function changeRoom(studentId: string, newRoomId: string): Promise<RoomAllocationRecord> {
+  return apiPatch<RoomAllocationRecord>('v1/rooms/allocate', { studentId, newRoomId });
 }
 
 export async function getFloors(): Promise<FloorRecord[]> {
